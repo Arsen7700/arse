@@ -51,7 +51,7 @@ GET/PUT           /product-goals/{year}/{month}, /product-goals
 GET               /dashboard
 GET               /reports/monthly
 GET/PUT           /telegram/schedule (PUT требует X-Telegram-Admin-Key)
-POST              /telegram/send-report (требует X-Telegram-Admin-Key)
+POST              /telegram/send-report (дневной или месячный; требует X-Telegram-Admin-Key)
 POST              /seed (только если APP_ENV не production)
 ```
 

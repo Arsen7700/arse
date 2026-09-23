@@ -27,6 +27,39 @@ def build_daily_report(db: Session, report_date: date, timezone_name: str) -> st
         .all()
     )
 
+    return _format_report(
+        f"Отчёт о продажах за {report_date.strftime('%d.%m.%Y')}",
+        sales,
+        "За выбранный день продаж нет.",
+    )
+
+
+def build_monthly_report(db: Session, year: int, month: int, timezone_name: str) -> str:
+    if not 2000 <= year <= 2100 or not 1 <= month <= 12:
+        raise ValueError("Некорректный год или месяц")
+    zone = ZoneInfo(timezone_name)
+    local_start = datetime(year, month, 1, tzinfo=zone)
+    local_end = (
+        datetime(year + 1, 1, 1, tzinfo=zone)
+        if month == 12
+        else datetime(year, month + 1, 1, tzinfo=zone)
+    )
+    start_utc = local_start.astimezone(timezone.utc).replace(tzinfo=None)
+    end_utc = local_end.astimezone(timezone.utc).replace(tzinfo=None)
+    sales = (
+        db.query(models.Sale)
+        .filter(models.Sale.sale_date >= start_utc, models.Sale.sale_date < end_utc)
+        .order_by(models.Sale.product_name, models.Sale.sale_date)
+        .all()
+    )
+    return _format_report(
+        f"Отчёт о продажах за {month:02d}.{year}",
+        sales,
+        "За выбранный месяц продаж нет.",
+    )
+
+
+def _format_report(title: str, sales: list, empty_message: str) -> str:
     grouped = {}
     for sale in sales:
         name = sale.product_name or "Товар без названия"
@@ -34,7 +67,7 @@ def build_daily_report(db: Session, report_date: date, timezone_name: str) -> st
         item["quantity"] += sale.quantity
         item["revenue"] += Decimal(str(sale.total_amount))
 
-    lines = [f"Отчёт о продажах за {report_date.strftime('%d.%m.%Y')}", ""]
+    lines = [title, ""]
     if grouped:
         for name, item in sorted(grouped.items(), key=lambda pair: pair[0].casefold()):
             quantity = item["quantity"]
@@ -45,7 +78,7 @@ def build_daily_report(db: Session, report_date: date, timezone_name: str) -> st
                 f"сумма {revenue:.2f} сом"
             )
     else:
-        lines.append("За выбранный день продаж нет.")
+        lines.append(empty_message)
 
     total_quantity = sum(item["quantity"] for item in grouped.values())
     lines.extend(

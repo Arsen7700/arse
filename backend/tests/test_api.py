@@ -321,3 +321,41 @@ def test_manual_telegram_report_uses_admin_key_and_sends_selected_date(client, m
     )
     assert response.status_code == 200, response.text
     assert delivered == ["report 2026-09-23 Asia/Almaty"]
+
+
+def test_monthly_telegram_report_groups_sales_by_product(client, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_KEY", "test-admin-secret")
+    product = create_product(client)
+    created = client.post(
+        "/sales",
+        json={
+            "product_id": product["id"],
+            "quantity": 2,
+            "sale_date": "2026-09-15T12:00:00",
+        },
+    )
+    assert created.status_code == 200, created.text
+    delivered = []
+    monkeypatch.setattr(main_module, "send_telegram_message", delivered.append)
+
+    response = client.post(
+        "/telegram/send-report",
+        json={"period": "month", "report_year": 2026, "report_month": 9},
+        headers={"X-Telegram-Admin-Key": "test-admin-secret"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert "Отчёт о продажах за 09.2026" in delivered[0]
+    assert "Тестовый товар — 2 шт." in delivered[0]
+    assert "сумма 50.00 сом" in delivered[0]
+    assert "Общая выручка" not in delivered[0]
+
+
+def test_monthly_telegram_report_requires_valid_year_and_month(client, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_KEY", "test-admin-secret")
+    response = client.post(
+        "/telegram/send-report",
+        json={"period": "month", "report_year": 2026},
+        headers={"X-Telegram-Admin-Key": "test-admin-secret"},
+    )
+    assert response.status_code == 422

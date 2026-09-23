@@ -15,7 +15,12 @@ from typing import Optional
 from .database import Base, engine, get_db, SessionLocal
 from . import models, schemas
 from .migrations import migrate_sales_schema
-from .telegram_reports import build_daily_report, check_and_send_scheduled_report, send_telegram_message
+from .telegram_reports import (
+    build_daily_report,
+    build_monthly_report,
+    check_and_send_scheduled_report,
+    send_telegram_message,
+)
 
 migrate_sales_schema(engine)
 Base.metadata.create_all(bind=engine)
@@ -449,7 +454,12 @@ def send_telegram_report(
     schedule = db.get(models.TelegramSchedule, 1)
     timezone_name = schedule.timezone if schedule else "Asia/Almaty"
     try:
-        report = build_daily_report(db, payload.report_date, timezone_name)
+        if payload.period == "month":
+            report = build_monthly_report(
+                db, payload.report_year, payload.report_month, timezone_name
+            )
+        else:
+            report = build_daily_report(db, payload.report_date, timezone_name)
         send_telegram_message(report)
     except (RuntimeError, ValueError) as error:
         raise HTTPException(status_code=502, detail=str(error))

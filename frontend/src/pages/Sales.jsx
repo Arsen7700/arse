@@ -14,6 +14,11 @@ const localDateInputValue = (date) => {
   return `${year}-${month}-${day}`;
 };
 
+const localMonthInputValue = (date) => {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${date.getFullYear()}-${month}`;
+};
+
 const dateAtTimezoneUtc = (dateValue, timezone) => {
   const [year, month, day] = dateValue.split("-").map(Number);
   const target = Date.UTC(year, month - 1, day);
@@ -55,7 +60,9 @@ export default function Sales() {
   const [historyDate, setHistoryDate] = useState(() => localDateInputValue(new Date()));
   const [historyLoading, setHistoryLoading] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [reportPeriod, setReportPeriod] = useState("day");
   const [reportDate, setReportDate] = useState(() => localDateInputValue(new Date()));
+  const [reportMonth, setReportMonth] = useState(() => localMonthInputValue(new Date()));
   const [reportSales, setReportSales] = useState([]);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportMessage, setReportMessage] = useState("");
@@ -100,11 +107,23 @@ export default function Sales() {
 
   useEffect(() => {
     const loadReport = async () => {
-      if (!reportOpen || !reportDate) return;
-      const [year, month, day] = reportDate.split("-").map(Number);
-      const nextDate = new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10);
-      const start = dateAtTimezoneUtc(reportDate, telegramSchedule.timezone);
-      const end = dateAtTimezoneUtc(nextDate, telegramSchedule.timezone);
+      if (!reportOpen) return;
+      let start;
+      let end;
+      if (reportPeriod === "day") {
+        if (!reportDate) return;
+        const [year, month, day] = reportDate.split("-").map(Number);
+        const nextDate = new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10);
+        start = dateAtTimezoneUtc(reportDate, telegramSchedule.timezone);
+        end = dateAtTimezoneUtc(nextDate, telegramSchedule.timezone);
+      } else {
+        if (!reportMonth) return;
+        const [year, month] = reportMonth.split("-").map(Number);
+        const firstDay = `${year}-${String(month).padStart(2, "0")}-01`;
+        const nextMonth = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
+        start = dateAtTimezoneUtc(firstDay, telegramSchedule.timezone);
+        end = dateAtTimezoneUtc(nextMonth, telegramSchedule.timezone);
+      }
       setReportLoading(true);
       setReportMessage("");
       try {
@@ -120,7 +139,7 @@ export default function Sales() {
       }
     };
     loadReport();
-  }, [reportOpen, reportDate, telegramSchedule.timezone]);
+  }, [reportOpen, reportPeriod, reportDate, reportMonth, telegramSchedule.timezone]);
 
   useEffect(() => {
     if (!reportOpen) return;
@@ -161,10 +180,13 @@ export default function Sales() {
       return `• ${item.product_name} — ${item.quantity} шт.; средняя цена ${averagePrice.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} сом; сумма ${item.revenue.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} сом`;
     });
   const reportQuantity = [...reportByProduct.values()].reduce((sum, item) => sum + item.quantity, 0);
+  const reportPeriodLabel = reportPeriod === "day"
+    ? (reportDate ? new Date(`${reportDate}T00:00:00`).toLocaleDateString("ru-RU") : "")
+    : (reportMonth ? new Date(`${reportMonth}-01T00:00:00`).toLocaleDateString("ru-RU", { month: "long", year: "numeric" }) : "");
   const reportText = [
-    `Отчёт о продажах за ${reportDate ? new Date(`${reportDate}T00:00:00`).toLocaleDateString("ru-RU") : ""}`,
+    `Отчёт о продажах за ${reportPeriodLabel}`,
     "",
-    ...(reportLines.length ? reportLines : ["За выбранный день продаж нет."]),
+    ...(reportLines.length ? reportLines : [reportPeriod === "day" ? "За выбранный день продаж нет." : "За выбранный месяц продаж нет."]),
     "",
     `Всего продано: ${reportQuantity} шт.`,
   ].join("\n");
@@ -194,9 +216,16 @@ export default function Sales() {
     setReportSending(true);
     setReportMessage("");
     try {
+      const reportPayload = reportPeriod === "day"
+        ? { period: "day", report_date: reportDate }
+        : {
+          period: "month",
+          report_year: Number(reportMonth.slice(0, 4)),
+          report_month: Number(reportMonth.slice(5, 7)),
+        };
       const response = await api.post(
         "/telegram/send-report",
-        { report_date: reportDate },
+        reportPayload,
         { headers: { "X-Telegram-Admin-Key": telegramAdminKey } }
       );
       setReportMessage(response.data.message);
@@ -522,19 +551,37 @@ export default function Sales() {
             <div className="modal-header">
               <div>
                 <h2 id="sales-report-title">Отчёт для Telegram</h2>
-                <p className="muted">Отчёт по проданным товарам за выбранный день.</p>
+                <p className="muted">Отчёт по проданным товарам за выбранный день или месяц.</p>
               </div>
               <button type="button" onClick={() => setReportOpen(false)}>Закрыть</button>
             </div>
 
             <label className="report-date-label">
-              День отчёта
-              <input
-                type="date"
-                value={reportDate}
-                onChange={(event) => setReportDate(event.target.value)}
-              />
+              Период отчёта
+              <select value={reportPeriod} onChange={(event) => setReportPeriod(event.target.value)}>
+                <option value="day">За день</option>
+                <option value="month">За месяц</option>
+              </select>
             </label>
+            {reportPeriod === "day" ? (
+              <label className="report-date-label">
+                День отчёта
+                <input
+                  type="date"
+                  value={reportDate}
+                  onChange={(event) => setReportDate(event.target.value)}
+                />
+              </label>
+            ) : (
+              <label className="report-date-label">
+                Месяц отчёта
+                <input
+                  type="month"
+                  value={reportMonth}
+                  onChange={(event) => setReportMonth(event.target.value)}
+                />
+              </label>
+            )}
 
             {reportLoading ? (
               <div className="notice">Формирую отчёт...</div>
@@ -558,7 +605,7 @@ export default function Sales() {
               <p className="small">Ключ действует только пока открыта эта страница и не сохраняется в браузере.</p>
               <div className="row report-actions">
                 <button type="button" className="primary" disabled={reportSending || reportLoading} onClick={sendReportNow}>
-                  {reportSending ? "Отправляю…" : "Отправить выбранный день сейчас"}
+                  {reportSending ? "Отправляю…" : "Отправить отчёт сейчас"}
                 </button>
               </div>
 

@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, model_validator
 from datetime import datetime, date
-from typing import Optional
+from typing import Optional, Literal
 
 class CategoryCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
@@ -128,4 +128,17 @@ class TelegramScheduleOut(TelegramScheduleUpdate):
 
 
 class TelegramReportRequest(BaseModel):
-    report_date: date
+    period: Literal["day", "month"] = "day"
+    report_date: Optional[date] = None
+    report_year: Optional[int] = Field(default=None, ge=2000, le=2100)
+    report_month: Optional[int] = Field(default=None, ge=1, le=12)
+
+    @model_validator(mode="after")
+    def validate_period_fields(self):
+        if self.period == "day" and self.report_date is None:
+            raise ValueError("Для дневного отчёта укажите report_date")
+        if self.period == "month" and (
+            self.report_year is None or self.report_month is None
+        ):
+            raise ValueError("Для месячного отчёта укажите report_year и report_month")
+        return self
