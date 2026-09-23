@@ -281,6 +281,27 @@ th {
   border-radius: 12px;
 }
 
+.sales-page-actions,
+.report-actions {
+  flex-wrap: wrap;
+}
+
+.report-date-label {
+  display: grid;
+  gap: 6px;
+  max-width: 260px;
+  margin-bottom: 14px;
+  color: #aab7cb;
+  font-size: 13px;
+}
+
+.report-text {
+  min-height: 240px;
+  margin-bottom: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
 .goal-period label {
   display: grid;
   gap: 6px;

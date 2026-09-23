@@ -29,6 +29,11 @@ export default function Sales() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyDate, setHistoryDate] = useState(() => localDateInputValue(new Date()));
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportDate, setReportDate] = useState(() => localDateInputValue(new Date()));
+  const [reportSales, setReportSales] = useState([]);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportMessage, setReportMessage] = useState("");
 
   const loadProducts = async () => {
     const p = await api.get("/products");
@@ -61,6 +66,29 @@ export default function Sales() {
     if (historyOpen) loadHistory();
   }, [historyOpen, historyDate]);
 
+  useEffect(() => {
+    const loadReport = async () => {
+      if (!reportOpen || !reportDate) return;
+      const [year, month, day] = reportDate.split("-").map(Number);
+      const start = new Date(year, month - 1, day);
+      const end = new Date(year, month - 1, day + 1);
+      setReportLoading(true);
+      setReportMessage("");
+      try {
+        const response = await api.get("/sales", {
+          params: { start: start.toISOString(), end: end.toISOString() },
+        });
+        setReportSales(response.data);
+      } catch (err) {
+        setReportSales([]);
+        setReportMessage(err.response?.data?.detail || "Не удалось загрузить данные отчёта");
+      } finally {
+        setReportLoading(false);
+      }
+    };
+    loadReport();
+  }, [reportOpen, reportDate]);
+
   const selected = useMemo(
     () => products.find((p) => p.id === Number(productId)),
     [products, productId]
@@ -75,6 +103,51 @@ export default function Sales() {
   const total = salePrice * Number(quantity || 0);
   const profit = (salePrice - purchasePrice) * Number(quantity || 0);
   const historyRevenue = sales.reduce((sum, sale) => sum + sale.total_amount, 0);
+  const reportByProduct = new Map();
+  reportSales.forEach((sale) => {
+    const name = sale.product_name || "Товар без названия";
+    const item = reportByProduct.get(name) || {
+      product_name: name,
+      quantity: 0,
+      revenue: 0,
+    };
+    item.quantity += sale.quantity;
+    item.revenue += sale.total_amount;
+    reportByProduct.set(name, item);
+  });
+  const reportLines = [...reportByProduct.values()]
+    .sort((a, b) => a.product_name.localeCompare(b.product_name, "ru"))
+    .map((item) => {
+      const averagePrice = item.quantity ? item.revenue / item.quantity : 0;
+      return `• ${item.product_name} — ${item.quantity} шт.; средняя цена ${averagePrice.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} сом; сумма ${item.revenue.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} сом`;
+    });
+  const reportQuantity = [...reportByProduct.values()].reduce((sum, item) => sum + item.quantity, 0);
+  const reportRevenue = [...reportByProduct.values()].reduce((sum, item) => sum + item.revenue, 0);
+  const reportText = [
+    `Отчёт о продажах за ${reportDate ? new Date(`${reportDate}T00:00:00`).toLocaleDateString("ru-RU") : ""}`,
+    "",
+    ...(reportLines.length ? reportLines : ["За выбранный день продаж нет."]),
+    "",
+    `Всего продано: ${reportQuantity} шт.`,
+    `Общая выручка: ${reportRevenue.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} сом`,
+  ].join("\n");
+
+  const copyReport = async () => {
+    try {
+      await navigator.clipboard.writeText(reportText);
+      setReportMessage("Отчёт скопирован. Его можно вставить в Telegram.");
+    } catch {
+      setReportMessage("Не удалось скопировать. Выделите текст отчёта и скопируйте вручную.");
+    }
+  };
+
+  const shareReportToTelegram = () => {
+    window.open(
+      `https://t.me/share/url?text=${encodeURIComponent(reportText)}`,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -155,9 +228,14 @@ export default function Sales() {
           <h1>Продажи</h1>
           <p className="muted">Регистрация продаж</p>
         </div>
-        <button type="button" onClick={() => setHistoryOpen(true)}>
-          История продаж
-        </button>
+        <div className="row sales-page-actions">
+          <button type="button" onClick={() => setHistoryOpen(true)}>
+            История продаж
+          </button>
+          <button type="button" className="primary" onClick={() => setReportOpen(true)}>
+            Отчёт для Telegram
+          </button>
+        </div>
       </div>
 
       <div className="card">
@@ -351,6 +429,51 @@ export default function Sales() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {reportOpen && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setReportOpen(false);
+          }}
+        >
+          <section className="sales-history-modal report-modal" role="dialog" aria-modal="true" aria-labelledby="sales-report-title">
+            <div className="modal-header">
+              <div>
+                <h2 id="sales-report-title">Отчёт для Telegram</h2>
+                <p className="muted">Отчёт по проданным товарам за выбранный день.</p>
+              </div>
+              <button type="button" onClick={() => setReportOpen(false)}>Закрыть</button>
+            </div>
+
+            <label className="report-date-label">
+              День отчёта
+              <input
+                type="date"
+                value={reportDate}
+                onChange={(event) => setReportDate(event.target.value)}
+              />
+            </label>
+
+            {reportLoading ? (
+              <div className="notice">Формирую отчёт...</div>
+            ) : (
+              <textarea className="report-text" readOnly value={reportText} />
+            )}
+            {reportMessage && <div className="notice">{reportMessage}</div>}
+
+            <div className="row report-actions">
+              <button type="button" className="primary" disabled={reportLoading} onClick={copyReport}>
+                Скопировать текст
+              </button>
+              <button type="button" disabled={reportLoading} onClick={shareReportToTelegram}>
+                Открыть Telegram
+              </button>
             </div>
           </section>
         </div>
