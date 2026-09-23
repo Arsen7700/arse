@@ -59,6 +59,24 @@ class SaleCreate(BaseModel):
             self.product_name = self.product_name.strip()
         return self
 
+
+class SaleUpdate(BaseModel):
+    product_name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    quantity: Optional[int] = Field(default=None, gt=0)
+    unit_sale_price: Optional[float] = Field(default=None, ge=0)
+    sale_date: Optional[datetime] = None
+
+    @model_validator(mode="after")
+    def clean_product_name(self):
+        for field_name in self.model_fields_set:
+            if getattr(self, field_name) is None:
+                raise ValueError(f"Поле {field_name} не может быть пустым")
+        if self.product_name is not None:
+            if not self.product_name.strip():
+                raise ValueError("Укажите название товара")
+            self.product_name = self.product_name.strip()
+        return self
+
 class SaleOut(BaseModel):
     id: int
     product_id: Optional[int]

@@ -1,6 +1,19 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 
+const toLocalDateTime = (value) => {
+  const date = new Date(value);
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+  return date.toISOString().slice(0, 16);
+};
+
+const localDateInputValue = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 export default function Sales() {
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
@@ -9,20 +22,44 @@ export default function Sales() {
   const [manualName, setManualName] = useState("");
   const [manualSalePrice, setManualSalePrice] = useState("");
   const [quantity, setQuantity] = useState(1);
-  const [saleDate, setSaleDate] = useState(
-    new Date().toISOString().slice(0, 16)
-  );
+  const [saleDate, setSaleDate] = useState(() => toLocalDateTime(new Date()));
   const [message, setMessage] = useState("");
+  const [historyMessage, setHistoryMessage] = useState("");
+  const [editingSale, setEditingSale] = useState(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyDate, setHistoryDate] = useState(() => localDateInputValue(new Date()));
+  const [historyLoading, setHistoryLoading] = useState(false);
 
-  const load = async () => {
-    const [p, s] = await Promise.all([api.get("/products"), api.get("/sales")]);
+  const loadProducts = async () => {
+    const p = await api.get("/products");
     setProducts(p.data);
-    setSales(s.data);
+  };
+
+  const loadHistory = async () => {
+    if (!historyDate) return;
+    const [year, month, day] = historyDate.split("-").map(Number);
+    const start = new Date(year, month - 1, day);
+    const end = new Date(year, month - 1, day + 1);
+    setHistoryLoading(true);
+    try {
+      const s = await api.get("/sales", {
+        params: { start: start.toISOString(), end: end.toISOString() },
+      });
+      setSales(s.data);
+    } catch (err) {
+      setHistoryMessage(err.response?.data?.detail || "Не удалось загрузить историю продаж");
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   useEffect(() => {
-    load();
+    loadProducts();
   }, []);
+
+  useEffect(() => {
+    if (historyOpen) loadHistory();
+  }, [historyOpen, historyDate]);
 
   const selected = useMemo(
     () => products.find((p) => p.id === Number(productId)),
@@ -37,6 +74,7 @@ export default function Sales() {
     : 0;
   const total = salePrice * Number(quantity || 0);
   const profit = (salePrice - purchasePrice) * Number(quantity || 0);
+  const historyRevenue = sales.reduce((sum, sale) => sum + sale.total_amount, 0);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -59,9 +97,54 @@ export default function Sales() {
         setManualName("");
         setManualSalePrice("");
       }
-      load();
+      await loadProducts();
+      if (historyOpen) await loadHistory();
     } catch (err) {
       setMessage(err.response?.data?.detail || "Ошибка продажи");
+    }
+  };
+
+  const beginEdit = (sale) => {
+    setEditingSale({
+      id: sale.id,
+      product_name: sale.product_name || "",
+      quantity: sale.quantity,
+      unit_sale_price: sale.unit_sale_price,
+      sale_date: toLocalDateTime(sale.sale_date),
+    });
+    setHistoryMessage("");
+  };
+
+  const saveSaleEdit = async (e) => {
+    e.preventDefault();
+    try {
+      await api.put(`/sales/${editingSale.id}`, {
+        product_name: editingSale.product_name.trim(),
+        quantity: Number(editingSale.quantity),
+        unit_sale_price: Number(editingSale.unit_sale_price),
+        sale_date: new Date(editingSale.sale_date).toISOString(),
+      });
+      setEditingSale(null);
+      setHistoryMessage("Продажа обновлена");
+      await loadProducts();
+      await loadHistory();
+    } catch (err) {
+      setHistoryMessage(err.response?.data?.detail || "Ошибка изменения продажи");
+    }
+  };
+
+  const deleteSale = async (saleId) => {
+    if (!window.confirm("Удалить эту продажу? Для продажи со склада остаток вернётся на склад.")) {
+      return;
+    }
+    try {
+      await api.delete(`/sales/${saleId}`);
+      if (editingSale?.id === saleId) setEditingSale(null);
+      setHistoryMessage("Продажа удалена");
+      await loadProducts();
+      await loadHistory();
+    } catch (err) {
+      setHistoryMessage(err.response?.data?.detail || "Ошибка удаления продажи");
     }
   };
 
@@ -70,8 +153,11 @@ export default function Sales() {
       <div className="page-header">
         <div>
           <h1>Продажи</h1>
-          <p className="muted">Регистрация и история продаж</p>
+          <p className="muted">Регистрация продаж</p>
         </div>
+        <button type="button" onClick={() => setHistoryOpen(true)}>
+          История продаж
+        </button>
       </div>
 
       <div className="card">
@@ -151,36 +237,124 @@ export default function Sales() {
         {message && <div className="notice">{message}</div>}
       </div>
 
-      <div className="card">
-        <div className="section-title">История продаж</div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Дата</th>
-                <th>Товар</th>
-                <th>Кол-во</th>
-                <th>Сумма</th>
-                <th>Прибыль</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sales.map((s) => {
-                const p = products.find((x) => x.id === s.product_id);
-                return (
-                  <tr key={s.id}>
-                    <td>{new Date(s.sale_date).toLocaleString("ru-RU")}</td>
-                    <td>{s.product_name || p?.name || "Товар недоступен"}</td>
-                    <td>{s.quantity}</td>
-                    <td>{s.total_amount} сом</td>
-                    <td>{s.profit} сом</td>
+      {historyOpen && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setHistoryOpen(false);
+              setEditingSale(null);
+            }
+          }}
+        >
+          <section className="sales-history-modal" role="dialog" aria-modal="true" aria-labelledby="sales-history-title">
+            <div className="modal-header">
+              <div>
+                <h2 id="sales-history-title">История продаж</h2>
+                <p className="muted">Выберите день, чтобы посмотреть продажи за эту дату.</p>
+              </div>
+              <button
+                type="button"
+                aria-label="Закрыть историю"
+                onClick={() => {
+                  setHistoryOpen(false);
+                  setEditingSale(null);
+                }}
+              >
+                Закрыть
+              </button>
+            </div>
+
+            <div className="history-toolbar">
+              <label>
+                День продаж
+                <input
+                  type="date"
+                  value={historyDate}
+                  onChange={(event) => setHistoryDate(event.target.value)}
+                />
+              </label>
+              <div className="history-summary">
+                {sales.length} продаж · выручка {historyRevenue.toLocaleString("ru-RU")} сом
+              </div>
+            </div>
+
+            {historyMessage && <div className="notice">{historyMessage}</div>}
+            {editingSale && (
+              <form className="form-grid history-edit-form" onSubmit={saveSaleEdit}>
+                <input
+                  placeholder="Название товара"
+                  value={editingSale.product_name}
+                  onChange={(e) => setEditingSale({ ...editingSale, product_name: e.target.value })}
+                  required
+                />
+                <input
+                  type="number"
+                  min="1"
+                  value={editingSale.quantity}
+                  onChange={(e) => setEditingSale({ ...editingSale, quantity: e.target.value })}
+                  required
+                />
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editingSale.unit_sale_price}
+                  onChange={(e) => setEditingSale({ ...editingSale, unit_sale_price: e.target.value })}
+                  required
+                />
+                <input
+                  type="datetime-local"
+                  value={editingSale.sale_date}
+                  onChange={(e) => setEditingSale({ ...editingSale, sale_date: e.target.value })}
+                  required
+                />
+                <div className="row">
+                  <button className="primary" type="submit">Сохранить изменения</button>
+                  <button type="button" onClick={() => setEditingSale(null)}>Отмена</button>
+                </div>
+              </form>
+            )}
+
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Время</th>
+                    <th>Товар</th>
+                    <th>Кол-во</th>
+                    <th>Сумма</th>
+                    <th>Прибыль</th>
+                    <th>Действия</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {historyLoading ? (
+                    <tr><td colSpan="6">Загрузка истории...</td></tr>
+                  ) : sales.length ? (
+                    sales.map((sale) => (
+                      <tr key={sale.id}>
+                        <td>{new Date(sale.sale_date).toLocaleTimeString("ru-RU")}</td>
+                        <td>{sale.product_name || "Товар недоступен"}</td>
+                        <td>{sale.quantity}</td>
+                        <td>{sale.total_amount} сом</td>
+                        <td>{sale.profit} сом</td>
+                        <td className="actions">
+                          <button type="button" onClick={() => beginEdit(sale)}>Изменить</button>
+                          <button type="button" className="danger" onClick={() => deleteSale(sale.id)}>Удалить</button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr><td colSpan="6">За выбранный день продаж нет</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </div>
-      </div>
+      )}
     </>
   );
 }

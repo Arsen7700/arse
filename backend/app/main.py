@@ -206,6 +206,88 @@ def create_sale(payload: schemas.SaleCreate, db: Session = Depends(get_db)):
     db.refresh(sale)
     return sale
 
+
+@app.put("/sales/{sale_id}", response_model=schemas.SaleOut)
+def update_sale(
+    sale_id: int, payload: schemas.SaleUpdate, db: Session = Depends(get_db)
+):
+    sale = db.get(models.Sale, sale_id)
+    if not sale:
+        raise HTTPException(status_code=404, detail="Продажа не найдена")
+
+    data = payload.model_dump(exclude_unset=True)
+    if "quantity" in data:
+        quantity_delta = data["quantity"] - sale.quantity
+        if quantity_delta and sale.product_id is not None:
+            if quantity_delta > 0:
+                result = db.execute(
+                    update(models.Product)
+                    .where(
+                        models.Product.id == sale.product_id,
+                        models.Product.quantity >= quantity_delta,
+                    )
+                    .values(quantity=models.Product.quantity - quantity_delta)
+                )
+                if not result.rowcount:
+                    db.rollback()
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Недостаточно товара на складе для увеличения продажи",
+                    )
+            else:
+                result = db.execute(
+                    update(models.Product)
+                    .where(models.Product.id == sale.product_id)
+                    .values(quantity=models.Product.quantity - quantity_delta)
+                )
+                if not result.rowcount:
+                    db.rollback()
+                    raise HTTPException(status_code=404, detail="Товар не найден")
+        sale.quantity = data["quantity"]
+
+    if "product_name" in data:
+        sale.product_name = data["product_name"]
+    if "unit_sale_price" in data:
+        sale.unit_sale_price = data["unit_sale_price"]
+    if "sale_date" in data:
+        sale.sale_date = data["sale_date"]
+
+    sale.total_amount = float(
+        (Decimal(str(sale.unit_sale_price)) * sale.quantity).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+    )
+    sale.profit = float(
+        (
+            (Decimal(str(sale.unit_sale_price)) - Decimal(str(sale.unit_purchase_price)))
+            * sale.quantity
+        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    )
+    db.commit()
+    db.refresh(sale)
+    return sale
+
+
+@app.delete("/sales/{sale_id}")
+def delete_sale(sale_id: int, db: Session = Depends(get_db)):
+    sale = db.get(models.Sale, sale_id)
+    if not sale:
+        raise HTTPException(status_code=404, detail="Продажа не найдена")
+
+    if sale.product_id is not None:
+        result = db.execute(
+            update(models.Product)
+            .where(models.Product.id == sale.product_id)
+            .values(quantity=models.Product.quantity + sale.quantity)
+        )
+        if not result.rowcount:
+            db.rollback()
+            raise HTTPException(status_code=404, detail="Товар не найден")
+
+    db.delete(sale)
+    db.commit()
+    return {"ok": True}
+
 @app.get("/sales", response_model=list[schemas.SaleOut])
 def list_sales(
     start: Optional[datetime] = None,

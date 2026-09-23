@@ -220,6 +220,67 @@ th {
   padding: 12px;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(3, 8, 18, .78);
+}
+
+.sales-history-modal {
+  width: min(1100px, 100%);
+  max-height: min(90vh, 900px);
+  overflow: auto;
+  padding: 22px;
+  background: #111827;
+  border: 1px solid #314361;
+  border-radius: 16px;
+  box-shadow: 0 20px 70px rgba(0, 0, 0, .5);
+}
+
+.modal-header,
+.history-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.modal-header h2 {
+  margin: 0 0 6px;
+}
+
+.modal-header p {
+  margin: 0;
+}
+
+.history-toolbar label {
+  display: grid;
+  gap: 6px;
+  color: #aab7cb;
+  font-size: 13px;
+}
+
+.history-toolbar input {
+  min-width: 190px;
+}
+
+.history-summary {
+  color: #c8d5e8;
+  font-weight: 600;
+}
+
+.history-edit-form {
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid #2a3850;
+  border-radius: 12px;
+}
+
 @media (max-width: 900px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -257,5 +318,24 @@ th {
   .page-header {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .modal-backdrop {
+    padding: 8px;
+  }
+
+  .sales-history-modal {
+    max-height: 96vh;
+    padding: 14px;
+  }
+
+  .modal-header,
+  .history-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .history-toolbar input {
+    min-width: 0;
   }
 }

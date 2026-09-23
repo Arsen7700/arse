@@ -136,6 +136,58 @@ def test_manual_sale_requires_name_and_sale_price(client):
     assert response.status_code == 422
 
 
+def test_manual_sale_can_be_edited_and_deleted(client):
+    created = client.post(
+        "/sales",
+        json={
+            "product_name": "Ручная продажа",
+            "unit_sale_price": 100,
+            "quantity": 2,
+            "sale_date": datetime.now().isoformat(),
+        },
+    )
+    assert created.status_code == 200, created.text
+    sale_id = created.json()["id"]
+
+    updated = client.put(
+        f"/sales/{sale_id}",
+        json={"product_name": "Исправленная продажа", "quantity": 3, "unit_sale_price": 50},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["product_name"] == "Исправленная продажа"
+    assert updated.json()["total_amount"] == 150
+    assert updated.json()["profit"] == 150
+
+    assert client.delete(f"/sales/{sale_id}").status_code == 200
+    assert client.get("/sales").json() == []
+
+
+def test_catalog_sale_edit_adjusts_stock_and_delete_restores_it(client):
+    product = create_product(client, quantity=5)
+    created = client.post(
+        "/sales",
+        json={
+            "product_id": product["id"],
+            "quantity": 2,
+            "sale_date": datetime.now().isoformat(),
+        },
+    )
+    sale_id = created.json()["id"]
+    assert client.get("/products").json()[0]["quantity"] == 3
+
+    updated = client.put(f"/sales/{sale_id}", json={"quantity": 4})
+    assert updated.status_code == 200, updated.text
+    assert client.get("/products").json()[0]["quantity"] == 1
+
+    rejected = client.put(f"/sales/{sale_id}", json={"quantity": 6})
+    assert rejected.status_code == 400
+    assert client.get("/sales").json()[0]["quantity"] == 4
+    assert client.get("/products").json()[0]["quantity"] == 1
+
+    assert client.delete(f"/sales/{sale_id}").status_code == 200
+    assert client.get("/products").json()[0]["quantity"] == 5
+
+
 def test_free_inventory_sale_decrements_stock_and_records_loss(client):
     product = create_product(client, quantity=2, purchase_price=10, sale_price=0)
     response = client.post(
