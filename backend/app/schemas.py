@@ -46,6 +46,7 @@ class SaleCreate(BaseModel):
     product_id: Optional[int] = None
     product_name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     unit_sale_price: Optional[float] = Field(default=None, ge=0)
+    total_amount: Optional[float] = Field(default=None, ge=0)
     quantity: int = Field(gt=0)
     sale_date: datetime
 
@@ -58,6 +59,17 @@ class SaleCreate(BaseModel):
                 )
             self.product_name = self.product_name.strip()
         return self
+
+
+class InventorySaleLineCreate(BaseModel):
+    product_id: int = Field(gt=0)
+    quantity: int = Field(gt=0)
+    total_amount: Optional[float] = Field(default=None, ge=0)
+
+
+class BulkInventorySaleCreate(BaseModel):
+    items: list[InventorySaleLineCreate] = Field(min_length=1, max_length=100)
+    sale_date: datetime
 
 
 class SaleUpdate(BaseModel):

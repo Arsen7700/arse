@@ -120,6 +120,29 @@ h1 {
   gap: 12px;
 }
 
+.inventory-sale-lines {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 12px;
+}
+
+.inventory-sale-line {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) minmax(110px, .7fr) minmax(190px, 1.2fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid #2a3850;
+  border-radius: 10px;
+}
+
+.inventory-sale-line label {
+  display: grid;
+  gap: 6px;
+  color: #aab7cb;
+  font-size: 13px;
+}
+
 input, select, textarea {
   width: 100%;
   background: #0d1525;
@@ -375,6 +398,10 @@ th {
   .form-grid,
   .filters,
   .telegram-schedule-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-sale-line {
     grid-template-columns: 1fr;
   }
 

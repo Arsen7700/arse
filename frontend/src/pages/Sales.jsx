@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { api } from "../api";
 
 const toLocalDateTime = (value) => {
@@ -48,7 +48,9 @@ export default function Sales() {
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
   const [saleType, setSaleType] = useState("inventory");
-  const [productId, setProductId] = useState("");
+  const [inventoryItems, setInventoryItems] = useState([
+    { product_id: "", quantity: 1, total_amount: "" },
+  ]);
   const [manualName, setManualName] = useState("");
   const [manualSalePrice, setManualSalePrice] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -148,19 +150,29 @@ export default function Sales() {
       .catch(() => setReportMessage("Не удалось загрузить настройки отправки"));
   }, [reportOpen]);
 
-  const selected = useMemo(
-    () => products.find((p) => p.id === Number(productId)),
-    [products, productId]
-  );
-
-  const salePrice = saleType === "inventory"
-    ? selected?.sale_price || 0
-    : Number(manualSalePrice || 0);
-  const purchasePrice = saleType === "inventory"
-    ? selected?.purchase_price || 0
-    : 0;
-  const total = salePrice * Number(quantity || 0);
-  const profit = (salePrice - purchasePrice) * Number(quantity || 0);
+  const inventoryTotal = inventoryItems.reduce((sum, line) => {
+    const product = products.find((item) => item.id === Number(line.product_id));
+    const lineQuantity = Number(line.quantity || 0);
+    const lineTotal = line.total_amount !== ""
+      ? Number(line.total_amount || 0)
+      : (product?.sale_price || 0) * lineQuantity;
+    return sum + lineTotal;
+  }, 0);
+  const inventoryProfit = inventoryItems.reduce((sum, line) => {
+    const product = products.find((item) => item.id === Number(line.product_id));
+    const lineQuantity = Number(line.quantity || 0);
+    const lineTotal = line.total_amount !== ""
+      ? Number(line.total_amount || 0)
+      : (product?.sale_price || 0) * lineQuantity;
+    return sum + lineTotal - (product?.purchase_price || 0) * lineQuantity;
+  }, 0);
+  const salePrice = Number(manualSalePrice || 0);
+  const total = saleType === "inventory"
+    ? inventoryTotal
+    : salePrice * Number(quantity || 0);
+  const profit = saleType === "inventory"
+    ? inventoryProfit
+    : total;
   const reportByProduct = new Map();
   reportSales.forEach((sale) => {
     const name = sale.product_name || "Товар без названия";
@@ -260,20 +272,29 @@ export default function Sales() {
     e.preventDefault();
     setMessage("");
     try {
-      const payload = {
-        quantity: Number(quantity),
-        sale_date: new Date(saleDate).toISOString(),
-      };
+      const saleDateIso = new Date(saleDate).toISOString();
       if (saleType === "inventory") {
-        payload.product_id = Number(productId);
+        const payload = {
+          sale_date: saleDateIso,
+          items: inventoryItems.map((line) => ({
+            product_id: Number(line.product_id),
+            quantity: Number(line.quantity),
+            total_amount: line.total_amount === "" ? undefined : Number(line.total_amount),
+          })),
+        };
+        const response = await api.post("/sales/bulk", payload);
+        setMessage(`Сохранено товаров в продаже: ${response.data.length}`);
+        setInventoryItems([{ product_id: "", quantity: 1, total_amount: "" }]);
       } else {
+        const payload = {
+          quantity: Number(quantity),
+          sale_date: saleDateIso,
+        };
         payload.product_name = manualName.trim();
-        payload.unit_sale_price = Number(manualSalePrice);
-      }
-      await api.post("/sales", payload);
-      setMessage("Продажа сохранена");
-      setQuantity(1);
-      if (saleType === "manual") {
+        payload.unit_sale_price = salePrice;
+        await api.post("/sales", payload);
+        setMessage("Продажа сохранена");
+        setQuantity(1);
         setManualName("");
         setManualSalePrice("");
       }
@@ -358,25 +379,81 @@ export default function Sales() {
             <button
               type="button"
               className={saleType === "manual" ? "primary" : ""}
-              onClick={() => setSaleType("manual")}
+              onClick={() => {
+                setSaleType("manual");
+              }}
             >
               Без добавления товара
             </button>
           </div>
 
           {saleType === "inventory" ? (
-            <select
-              value={productId}
-              onChange={(e) => setProductId(e.target.value)}
-              required
-            >
-              <option value="">Выберите товар со склада</option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} — осталось {p.quantity}
-                </option>
+            <div className="inventory-sale-lines">
+              {inventoryItems.map((line, index) => (
+                <div className="inventory-sale-line" key={index}>
+                  <label>
+                    Товар {index + 1}
+                    <select
+                      value={line.product_id}
+                      onChange={(event) => setInventoryItems(inventoryItems.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, product_id: event.target.value } : item
+                      ))}
+                      required
+                    >
+                      <option value="">Выберите товар со склада</option>
+                      {products.map((product) => (
+                        <option key={product.id} value={product.id}>
+                          {product.name} — осталось {product.quantity}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Количество
+                    <input
+                      type="number"
+                      min="1"
+                      value={line.quantity}
+                      onChange={(event) => setInventoryItems(inventoryItems.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, quantity: event.target.value } : item
+                      ))}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Сумма строки (необязательно)
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="По цене товара"
+                      value={line.total_amount}
+                      onChange={(event) => setInventoryItems(inventoryItems.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, total_amount: event.target.value } : item
+                      ))}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="danger"
+                    disabled={inventoryItems.length === 1}
+                    onClick={() => setInventoryItems(inventoryItems.filter((_, itemIndex) => itemIndex !== index))}
+                    aria-label={`Удалить строку товара ${index + 1}`}
+                  >
+                    Убрать
+                  </button>
+                </div>
               ))}
-            </select>
+              <button
+                type="button"
+                onClick={() => setInventoryItems([
+                  ...inventoryItems,
+                  { product_id: "", quantity: 1, total_amount: "" },
+                ])}
+              >
+                + Добавить товар
+              </button>
+            </div>
           ) : (
             <>
               <input
@@ -397,12 +474,14 @@ export default function Sales() {
             </>
           )}
 
-          <input
-            type="number"
-            min="1"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-          />
+          {saleType === "manual" && (
+            <input
+              type="number"
+              min="1"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+            />
+          )}
 
           <input
             type="datetime-local"

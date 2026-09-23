@@ -210,23 +210,30 @@ def create_sale(payload: schemas.SaleCreate, db: Session = Depends(get_db)):
         sale_price = payload.unit_sale_price
         purchase_price = 0
 
-    total = float(
-        (Decimal(str(sale_price)) * payload.quantity).quantize(
+    if product and payload.total_amount is not None:
+        total_decimal = Decimal(str(payload.total_amount)).quantize(
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
-    )
-    profit = float(
-        (
+        sale_price = total_decimal / payload.quantity
+        profit_decimal = (
+            total_decimal - Decimal(str(purchase_price)) * payload.quantity
+        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    else:
+        total_decimal = (Decimal(str(sale_price)) * payload.quantity).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        profit_decimal = (
             (Decimal(str(sale_price)) - Decimal(str(purchase_price)))
             * payload.quantity
         ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    )
+    total = float(total_decimal)
+    profit = float(profit_decimal)
 
     sale = models.Sale(
         product_id=product.id if product else None,
         product_name=product_name,
         quantity=payload.quantity,
-        unit_sale_price=sale_price,
+        unit_sale_price=float(sale_price),
         unit_purchase_price=purchase_price,
         total_amount=total,
         profit=profit,
@@ -255,6 +262,86 @@ def create_sale(payload: schemas.SaleCreate, db: Session = Depends(get_db)):
         raise
     db.refresh(sale)
     return sale
+
+
+@app.post("/sales/bulk", response_model=list[schemas.SaleOut])
+def create_bulk_inventory_sale(
+    payload: schemas.BulkInventorySaleCreate, db: Session = Depends(get_db)
+):
+    products = {}
+    requested_quantities = {}
+    for item in payload.items:
+        requested_quantities[item.product_id] = (
+            requested_quantities.get(item.product_id, 0) + item.quantity
+        )
+
+    for product_id in requested_quantities:
+        product = db.get(models.Product, product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Товар не найден")
+        products[product_id] = product
+
+    created_sales = []
+    try:
+        # Decrement each distinct product once. All lines are committed together;
+        # a shortage on any item rolls back every stock change and sale row.
+        for product_id, requested_quantity in requested_quantities.items():
+            result = db.execute(
+                update(models.Product)
+                .where(
+                    models.Product.id == product_id,
+                    models.Product.quantity >= requested_quantity,
+                )
+                .values(quantity=models.Product.quantity - requested_quantity)
+            )
+            if not result.rowcount:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Недостаточно товара на складе: {products[product_id].name}",
+                )
+
+        for item in payload.items:
+            product = products[item.product_id]
+            purchase_price = Decimal(str(product.purchase_price))
+            if item.total_amount is not None:
+                total_decimal = Decimal(str(item.total_amount)).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+                unit_sale_price = total_decimal / item.quantity
+                profit_decimal = (
+                    total_decimal - purchase_price * item.quantity
+                ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            else:
+                unit_sale_price = Decimal(str(product.sale_price))
+                total_decimal = (unit_sale_price * item.quantity).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+                profit_decimal = (
+                    (unit_sale_price - purchase_price) * item.quantity
+                ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+            created_sales.append(
+                models.Sale(
+                    product_id=product.id,
+                    product_name=product.name,
+                    quantity=item.quantity,
+                    unit_sale_price=float(unit_sale_price),
+                    unit_purchase_price=product.purchase_price,
+                    total_amount=float(total_decimal),
+                    profit=float(profit_decimal),
+                    sale_date=payload.sale_date,
+                )
+            )
+
+        db.add_all(created_sales)
+        db.commit()
+        for sale in created_sales:
+            db.refresh(sale)
+    except Exception:
+        db.rollback()
+        raise
+
+    return created_sales
 
 
 @app.put("/sales/{sale_id}", response_model=schemas.SaleOut)

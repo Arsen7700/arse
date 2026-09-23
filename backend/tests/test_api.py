@@ -94,6 +94,41 @@ def test_sale_decrements_stock_and_calculates_revenue_and_profit(client):
     assert client.delete(f"/products/{product['id']}").status_code == 400
 
 
+def test_inventory_sale_can_override_total_amount_optionally(client):
+    product = create_product(client, quantity=5, purchase_price=10, sale_price=25)
+    response = client.post(
+        "/sales",
+        json={
+            "product_id": product["id"],
+            "quantity": 2,
+            "total_amount": 40,
+            "sale_date": datetime.now().isoformat(),
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    sale = response.json()
+    assert sale["total_amount"] == 40
+    assert sale["unit_sale_price"] == 20
+    assert sale["profit"] == 20
+    assert client.get("/products").json()[0]["quantity"] == 3
+
+
+def test_inventory_sale_rejects_negative_total_amount(client):
+    product = create_product(client)
+    response = client.post(
+        "/sales",
+        json={
+            "product_id": product["id"],
+            "quantity": 1,
+            "total_amount": -1,
+            "sale_date": datetime.now().isoformat(),
+        },
+    )
+    assert response.status_code == 422
+    assert client.get("/products").json()[0]["quantity"] == 5
+
+
 def test_sale_cannot_exceed_stock(client):
     product = create_product(client, quantity=1)
     response = client.post(
@@ -106,6 +141,58 @@ def test_sale_cannot_exceed_stock(client):
     )
     assert response.status_code == 400
     assert client.get("/products").json()[0]["quantity"] == 1
+    assert client.get("/sales").json() == []
+
+
+def test_bulk_inventory_sale_saves_multiple_items_and_decrements_stock(client):
+    first = create_product(client, quantity=4, purchase_price=10, sale_price=25)
+    second_response = client.post(
+        "/products",
+        json={"name": "Второй товар", "purchase_price": 5, "sale_price": 12, "quantity": 3},
+    )
+    assert second_response.status_code == 200, second_response.text
+    second = second_response.json()
+
+    response = client.post(
+        "/sales/bulk",
+        json={
+            "sale_date": datetime.now().isoformat(),
+            "items": [
+                {"product_id": first["id"], "quantity": 2},
+                {"product_id": second["id"], "quantity": 1, "total_amount": 10},
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert len(response.json()) == 2
+    stock = {product["id"]: product["quantity"] for product in client.get("/products").json()}
+    assert stock == {first["id"]: 2, second["id"]: 2}
+    assert len(client.get("/sales").json()) == 2
+
+
+def test_bulk_inventory_sale_rolls_back_all_items_if_any_stock_is_insufficient(client):
+    first = create_product(client, quantity=4)
+    second_response = client.post(
+        "/products",
+        json={"name": "Второй товар", "sale_price": 12, "quantity": 1},
+    )
+    second = second_response.json()
+
+    response = client.post(
+        "/sales/bulk",
+        json={
+            "sale_date": datetime.now().isoformat(),
+            "items": [
+                {"product_id": first["id"], "quantity": 2},
+                {"product_id": second["id"], "quantity": 2},
+            ],
+        },
+    )
+
+    assert response.status_code == 400
+    stock = {product["id"]: product["quantity"] for product in client.get("/products").json()}
+    assert stock == {first["id"]: 4, second["id"]: 1}
     assert client.get("/sales").json() == []
 
 
