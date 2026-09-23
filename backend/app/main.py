@@ -531,7 +531,6 @@ def dashboard(
         models.Sale.sale_date < end,
     ).all()
 
-    revenue = sum(s.total_amount for s in sales)
     profit = sum(s.profit for s in sales)
     sold_quantity = sum(s.quantity for s in sales)
 
@@ -545,18 +544,7 @@ def dashboard(
 
     revenue_goal = goal.revenue_goal if goal else 0
     quantity_goal = goal.quantity_goal if goal else 0
-    revenue_progress = (revenue / revenue_goal * 100) if revenue_goal > 0 else 0
     quantity_progress = (sold_quantity / quantity_goal * 100) if quantity_goal > 0 else 0
-
-    per_day = {}
-    for s in sales:
-        key = s.sale_date.strftime("%Y-%m-%d")
-        per_day[key] = per_day.get(key, 0) + s.total_amount
-
-    daily_series = [
-        {"date": k, "revenue": round(v, 2)}
-        for k, v in sorted(per_day.items())
-    ]
 
     product_stats = {}
     for product in products:
@@ -611,16 +599,12 @@ def dashboard(
     return {
         "year": year,
         "month": month,
-        "revenue": round(revenue, 2),
         "profit": round(profit, 2),
         "sold_quantity": sold_quantity,
         "stock_quantity": int(stock_qty),
         "revenue_goal": revenue_goal,
         "quantity_goal": quantity_goal,
-        "revenue_progress": round(revenue_progress, 1),
         "quantity_progress": round(quantity_progress, 1),
-        "remaining_revenue": round(max(revenue_goal - revenue, 0), 2),
-        "daily_series": daily_series,
         "per_product": per_product,
     }
 
@@ -629,7 +613,6 @@ def monthly_report(db: Session = Depends(get_db)):
     rows = db.query(
         extract("year", models.Sale.sale_date).label("year"),
         extract("month", models.Sale.sale_date).label("month_number"),
-        func.sum(models.Sale.total_amount).label("revenue"),
         func.sum(models.Sale.profit).label("profit"),
         func.sum(models.Sale.quantity).label("quantity"),
     ).group_by("year", "month_number").order_by("year", "month_number").all()
@@ -637,7 +620,6 @@ def monthly_report(db: Session = Depends(get_db)):
     return [
         {
             "month": f"{int(r.year):04d}-{int(r.month_number):02d}",
-            "revenue": round(r.revenue or 0, 2),
             "profit": round(r.profit or 0, 2),
             "quantity": int(r.quantity or 0),
         }

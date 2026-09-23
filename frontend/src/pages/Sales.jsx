@@ -142,7 +142,6 @@ export default function Sales() {
     : 0;
   const total = salePrice * Number(quantity || 0);
   const profit = (salePrice - purchasePrice) * Number(quantity || 0);
-  const historyRevenue = sales.reduce((sum, sale) => sum + sale.total_amount, 0);
   const reportByProduct = new Map();
   reportSales.forEach((sale) => {
     const name = sale.product_name || "Товар без названия";
@@ -162,14 +161,12 @@ export default function Sales() {
       return `• ${item.product_name} — ${item.quantity} шт.; средняя цена ${averagePrice.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} сом; сумма ${item.revenue.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} сом`;
     });
   const reportQuantity = [...reportByProduct.values()].reduce((sum, item) => sum + item.quantity, 0);
-  const reportRevenue = [...reportByProduct.values()].reduce((sum, item) => sum + item.revenue, 0);
   const reportText = [
     `Отчёт о продажах за ${reportDate ? new Date(`${reportDate}T00:00:00`).toLocaleDateString("ru-RU") : ""}`,
     "",
     ...(reportLines.length ? reportLines : ["За выбранный день продаж нет."]),
     "",
     `Всего продано: ${reportQuantity} шт.`,
-    `Общая выручка: ${reportRevenue.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} сом`,
   ].join("\n");
 
   const copyReport = async () => {
@@ -434,9 +431,7 @@ export default function Sales() {
                   onChange={(event) => setHistoryDate(event.target.value)}
                 />
               </label>
-              <div className="history-summary">
-                {sales.length} продаж · выручка {historyRevenue.toLocaleString("ru-RU")} сом
-              </div>
+              <div className="history-summary">Продаж за день: {sales.length}</div>
             </div>
 
             {historyMessage && <div className="notice">{historyMessage}</div>}

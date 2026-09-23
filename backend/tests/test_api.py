@@ -227,7 +227,8 @@ def test_goal_upsert_dashboard_and_monthly_report(client):
 
     dashboard = client.get("/dashboard", params={"year": now.year, "month": now.month})
     assert dashboard.status_code == 200
-    assert dashboard.json()["revenue"] == 50
+    assert "revenue" not in dashboard.json()
+    assert "daily_series" not in dashboard.json()
     assert dashboard.json()["profit"] == 30
     assert "stock_value" not in dashboard.json()
     product_stats = dashboard.json()["per_product"]
@@ -240,6 +241,7 @@ def test_goal_upsert_dashboard_and_monthly_report(client):
     report = client.get("/reports/monthly")
     assert report.status_code == 200
     assert report.json()[0]["month"] == now.strftime("%Y-%m")
+    assert "revenue" not in report.json()[0]
 
 
 def test_product_goals_are_saved_separately_by_product_and_month(client):

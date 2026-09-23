@@ -48,14 +48,10 @@ def build_daily_report(db: Session, report_date: date, timezone_name: str) -> st
         lines.append("За выбранный день продаж нет.")
 
     total_quantity = sum(item["quantity"] for item in grouped.values())
-    total_revenue = sum(
-        (item["revenue"] for item in grouped.values()), Decimal("0")
-    )
     lines.extend(
         [
             "",
             f"Всего продано: {total_quantity} шт.",
-            f"Общая выручка: {total_revenue:.2f} сом",
         ]
     )
     return "\n".join(lines)
