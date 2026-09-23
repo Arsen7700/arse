@@ -229,6 +229,7 @@ def test_goal_upsert_dashboard_and_monthly_report(client):
     assert dashboard.status_code == 200
     assert dashboard.json()["revenue"] == 50
     assert dashboard.json()["profit"] == 30
+    assert "stock_value" not in dashboard.json()
     product_stats = dashboard.json()["per_product"]
     assert len(product_stats) == 1
     assert product_stats[0]["product_name"] == "Тестовый товар"

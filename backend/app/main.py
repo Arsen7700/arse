@@ -537,9 +537,6 @@ def dashboard(
 
     products = db.query(models.Product).order_by(models.Product.name).all()
     stock_qty = sum(product.quantity for product in products)
-    stock_value = db.query(
-        func.coalesce(func.sum(models.Product.purchase_price * models.Product.quantity), 0)
-    ).scalar() or 0
 
     goal = db.query(models.MonthlyGoal).filter(
         models.MonthlyGoal.year == year,
@@ -618,7 +615,6 @@ def dashboard(
         "profit": round(profit, 2),
         "sold_quantity": sold_quantity,
         "stock_quantity": int(stock_qty),
-        "stock_value": round(float(stock_value), 2),
         "revenue_goal": revenue_goal,
         "quantity_goal": quantity_goal,
         "revenue_progress": round(revenue_progress, 1),
