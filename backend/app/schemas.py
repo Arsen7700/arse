@@ -12,8 +12,8 @@ class CategoryOut(CategoryCreate):
 class ProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     category_id: Optional[int] = None
-    purchase_price: float = Field(ge=0)
-    sale_price: float = Field(gt=0)
+    purchase_price: float = Field(default=0, ge=0)
+    sale_price: float = Field(ge=0)
     quantity: int = Field(ge=0)
     description: Optional[str] = None
     image_url: Optional[str] = None
@@ -22,7 +22,7 @@ class ProductUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     category_id: Optional[int] = None
     purchase_price: Optional[float] = Field(default=None, ge=0)
-    sale_price: Optional[float] = Field(default=None, gt=0)
+    sale_price: Optional[float] = Field(default=None, ge=0)
     quantity: Optional[int] = Field(default=None, ge=0)
     description: Optional[str] = None
     image_url: Optional[str] = None
@@ -45,7 +45,7 @@ class StockChange(BaseModel):
 class SaleCreate(BaseModel):
     product_id: Optional[int] = None
     product_name: Optional[str] = Field(default=None, min_length=1, max_length=200)
-    unit_sale_price: Optional[float] = Field(default=None, gt=0)
+    unit_sale_price: Optional[float] = Field(default=None, ge=0)
     quantity: int = Field(gt=0)
     sale_date: datetime
 

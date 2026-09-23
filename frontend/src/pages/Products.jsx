@@ -4,7 +4,6 @@ import { api } from "../api";
 const emptyForm = {
   name: "",
   category_id: "",
-  purchase_price: 0,
   sale_price: 0,
   quantity: 0,
   description: "",
@@ -44,7 +43,6 @@ export default function Products() {
     const payload = {
       ...form,
       category_id: form.category_id ? Number(form.category_id) : null,
-      purchase_price: Number(form.purchase_price),
       sale_price: Number(form.sale_price),
       quantity: Number(form.quantity),
     };
@@ -70,7 +68,6 @@ export default function Products() {
     setForm({
       name: p.name,
       category_id: p.category_id || "",
-      purchase_price: p.purchase_price,
       sale_price: p.sale_price,
       quantity: p.quantity,
       description: p.description || "",
@@ -96,20 +93,12 @@ export default function Products() {
     }
   };
 
-  const stockValue = products.reduce(
-    (sum, p) => sum + p.purchase_price * p.quantity,
-    0
-  );
-
   return (
     <>
       <div className="page-header">
         <div>
           <h1>Товары</h1>
-          <p className="muted">
-            Управление складом. Стоимость текущего списка:{" "}
-            {stockValue.toLocaleString("ru-RU")} сом
-          </p>
+          <p className="muted">Управление складом</p>
         </div>
       </div>
 
@@ -139,14 +128,6 @@ export default function Products() {
           <input
             type="number"
             min="0"
-            step="0.01"
-            placeholder="Закупочная стоимость"
-            value={form.purchase_price}
-            onChange={(e) => setForm({ ...form, purchase_price: e.target.value })}
-          />
-          <input
-            type="number"
-            min="0.01"
             step="0.01"
             placeholder="Цена продажи"
             value={form.sale_price}
@@ -215,7 +196,6 @@ export default function Products() {
             <thead>
               <tr>
                 <th>Название</th>
-                <th>Закупка</th>
                 <th>Продажа</th>
                 <th>Остаток</th>
                 <th>Действия</th>
@@ -225,7 +205,6 @@ export default function Products() {
               {products.map((p) => (
                 <tr key={p.id}>
                   <td>{p.name}</td>
-                  <td>{p.purchase_price} сом</td>
                   <td>{p.sale_price} сом</td>
                   <td>{p.quantity}</td>
                   <td className="actions">

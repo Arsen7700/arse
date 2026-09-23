@@ -71,6 +71,40 @@ export default function Dashboard() {
       </div>
 
       <div className="card">
+        <div className="section-title">Статистика по каждому товару за месяц</div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Товар</th>
+                <th>Продано</th>
+                <th>Выручка</th>
+                <th>Прибыль</th>
+                <th>Остаток</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.per_product?.length ? (
+                data.per_product.map((item) => (
+                  <tr key={item.product_id ?? `manual-${item.product_name}`}>
+                    <td>{item.product_name}</td>
+                    <td>{item.sold_quantity}</td>
+                    <td>{money(item.revenue)}</td>
+                    <td>{money(item.profit)}</td>
+                    <td>{item.stock_quantity ?? "—"}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="5">Товары пока не добавлены</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card">
         <div className="section-title">Прогресс по выручке</div>
         <div className="progress">
           <div

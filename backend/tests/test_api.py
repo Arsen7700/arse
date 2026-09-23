@@ -49,6 +49,15 @@ def create_product(client, *, quantity=5, purchase_price=10, sale_price=25):
     return response.json()
 
 
+def test_product_can_be_created_without_purchase_price(client):
+    response = client.post(
+        "/products",
+        json={"name": "Товар без закупочной цены", "sale_price": 20, "quantity": 3},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["purchase_price"] == 0
+
+
 def test_product_crud_and_stock_validation(client):
     product = create_product(client)
     product_id = product["id"]
@@ -127,6 +136,23 @@ def test_manual_sale_requires_name_and_sale_price(client):
     assert response.status_code == 422
 
 
+def test_free_inventory_sale_decrements_stock_and_records_loss(client):
+    product = create_product(client, quantity=2, purchase_price=10, sale_price=0)
+    response = client.post(
+        "/sales",
+        json={
+            "product_id": product["id"],
+            "quantity": 1,
+            "sale_date": datetime.now().isoformat(),
+        },
+    )
+    assert response.status_code == 200, response.text
+    sale = response.json()
+    assert sale["total_amount"] == 0
+    assert sale["profit"] == -10
+    assert client.get("/products").json()[0]["quantity"] == 1
+
+
 def test_goal_upsert_dashboard_and_monthly_report(client):
     product = create_product(client)
     now = datetime.now()
@@ -150,6 +176,13 @@ def test_goal_upsert_dashboard_and_monthly_report(client):
     assert dashboard.status_code == 200
     assert dashboard.json()["revenue"] == 50
     assert dashboard.json()["profit"] == 30
+    product_stats = dashboard.json()["per_product"]
+    assert len(product_stats) == 1
+    assert product_stats[0]["product_name"] == "Тестовый товар"
+    assert product_stats[0]["sold_quantity"] == 2
+    assert product_stats[0]["revenue"] == 50
+    assert product_stats[0]["profit"] == 30
+    assert product_stats[0]["stock_quantity"] == 3
     report = client.get("/reports/monthly")
     assert report.status_code == 200
     assert report.json()[0]["month"] == now.strftime("%Y-%m")

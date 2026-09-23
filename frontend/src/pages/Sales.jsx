@@ -116,7 +116,7 @@ export default function Sales() {
               />
               <input
                 type="number"
-                min="0.01"
+                min="0"
                 step="0.01"
                 placeholder="Цена продажи за единицу"
                 value={manualSalePrice}

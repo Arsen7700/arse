@@ -281,7 +281,8 @@ def dashboard(
     profit = sum(s.profit for s in sales)
     sold_quantity = sum(s.quantity for s in sales)
 
-    stock_qty = db.query(func.coalesce(func.sum(models.Product.quantity), 0)).scalar() or 0
+    products = db.query(models.Product).order_by(models.Product.name).all()
+    stock_qty = sum(product.quantity for product in products)
     stock_value = db.query(
         func.coalesce(func.sum(models.Product.purchase_price * models.Product.quantity), 0)
     ).scalar() or 0
@@ -306,6 +307,56 @@ def dashboard(
         for k, v in sorted(per_day.items())
     ]
 
+    product_stats = {}
+    for product in products:
+        product_stats[("catalog", product.id)] = {
+            "product_id": product.id,
+            "product_name": product.name,
+            "sold_quantity": 0,
+            "revenue": 0.0,
+            "profit": 0.0,
+            "stock_quantity": product.quantity,
+        }
+
+    for sale in sales:
+        if sale.product_id is not None:
+            key = ("catalog", sale.product_id)
+            if key not in product_stats:
+                product_stats[key] = {
+                    "product_id": sale.product_id,
+                    "product_name": sale.product_name,
+                    "sold_quantity": 0,
+                    "revenue": 0.0,
+                    "profit": 0.0,
+                    "stock_quantity": 0,
+                }
+        else:
+            key = ("manual", sale.product_name)
+            if key not in product_stats:
+                product_stats[key] = {
+                    "product_id": None,
+                    "product_name": sale.product_name,
+                    "sold_quantity": 0,
+                    "revenue": 0.0,
+                    "profit": 0.0,
+                    "stock_quantity": None,
+                }
+        stats = product_stats[key]
+        stats["sold_quantity"] += sale.quantity
+        stats["revenue"] += sale.total_amount
+        stats["profit"] += sale.profit
+
+    per_product = [
+        {
+            **stats,
+            "revenue": round(stats["revenue"], 2),
+            "profit": round(stats["profit"], 2),
+        }
+        for stats in sorted(
+            product_stats.values(), key=lambda item: item["product_name"].casefold()
+        )
+    ]
+
     return {
         "year": year,
         "month": month,
@@ -320,6 +371,7 @@ def dashboard(
         "quantity_progress": round(quantity_progress, 1),
         "remaining_revenue": round(max(revenue_goal - revenue, 0), 2),
         "daily_series": daily_series,
+        "per_product": per_product,
     }
 
 @app.get("/reports/monthly")
