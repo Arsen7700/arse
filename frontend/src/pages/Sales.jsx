@@ -188,8 +188,7 @@ export default function Sales() {
   const reportLines = [...reportByProduct.values()]
     .sort((a, b) => a.product_name.localeCompare(b.product_name, "ru"))
     .map((item) => {
-      const averagePrice = item.quantity ? item.revenue / item.quantity : 0;
-      return `• ${item.product_name} — ${item.quantity} шт.; средняя цена ${averagePrice.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} сом; сумма ${item.revenue.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} сом`;
+      return `• ${item.product_name} — ${item.quantity} шт.; сумма ${item.revenue.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} сом`;
     });
   const reportQuantity = [...reportByProduct.values()].reduce((sum, item) => sum + item.quantity, 0);
   const reportPeriodLabel = reportPeriod === "day"

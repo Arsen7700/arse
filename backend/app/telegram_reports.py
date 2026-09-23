@@ -72,10 +72,8 @@ def _format_report(title: str, sales: list, empty_message: str) -> str:
         for name, item in sorted(grouped.items(), key=lambda pair: pair[0].casefold()):
             quantity = item["quantity"]
             revenue = item["revenue"]
-            average_price = revenue / quantity if quantity else Decimal("0")
             lines.append(
-                f"• {name} — {quantity} шт.; средняя цена {average_price:.2f} сом; "
-                f"сумма {revenue:.2f} сом"
+                f"• {name} — {quantity} шт.; сумма {revenue:.2f} сом"
             )
     else:
         lines.append(empty_message)

@@ -435,6 +435,7 @@ def test_monthly_telegram_report_groups_sales_by_product(client, monkeypatch):
     assert "Отчёт о продажах за 09.2026" in delivered[0]
     assert "Тестовый товар — 2 шт." in delivered[0]
     assert "сумма 50.00 сом" in delivered[0]
+    assert "средняя цена" not in delivered[0]
     assert "Общая выручка" not in delivered[0]
 
 
