@@ -1,21 +1,63 @@
+import asyncio
+import hmac
+import logging
 import os
 from decimal import Decimal, ROUND_HALF_UP
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import FastAPI, Depends, HTTPException, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import extract, func, update
 from datetime import datetime
 from typing import Optional
 
-from .database import Base, engine, get_db
+from .database import Base, engine, get_db, SessionLocal
 from . import models, schemas
 from .migrations import migrate_sales_schema
+from .telegram_reports import build_daily_report, check_and_send_scheduled_report, send_telegram_message
 
 migrate_sales_schema(engine)
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Inventory & Sales API", version="1.0.0")
+logger = logging.getLogger(__name__)
+telegram_scheduler_task = None
+
+
+def require_telegram_admin(x_telegram_admin_key: Optional[str] = Header(None)):
+    expected_key = os.getenv("TELEGRAM_ADMIN_KEY", "")
+    if not expected_key:
+        raise HTTPException(status_code=503, detail="TELEGRAM_ADMIN_KEY не настроен на backend")
+    if not x_telegram_admin_key or not hmac.compare_digest(x_telegram_admin_key, expected_key):
+        raise HTTPException(status_code=403, detail="Неверный ключ администратора Telegram")
+
+
+async def telegram_scheduler_loop():
+    while True:
+        try:
+            await asyncio.to_thread(check_and_send_scheduled_report, SessionLocal)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Scheduled Telegram report failed")
+        await asyncio.sleep(30)
+
+
+@app.on_event("startup")
+async def start_telegram_scheduler():
+    global telegram_scheduler_task
+    telegram_scheduler_task = asyncio.create_task(telegram_scheduler_loop())
+
+
+@app.on_event("shutdown")
+async def stop_telegram_scheduler():
+    if telegram_scheduler_task:
+        telegram_scheduler_task.cancel()
+        try:
+            await telegram_scheduler_task
+        except asyncio.CancelledError:
+            pass
 
 cors_origins = [
     origin.strip()
@@ -345,6 +387,73 @@ def get_goal(year: int, month: int, db: Session = Depends(get_db)):
         "revenue_goal": goal.revenue_goal,
         "quantity_goal": goal.quantity_goal
     }
+
+
+def telegram_schedule_data(schedule):
+    if schedule is None:
+        return {
+            "enabled": False,
+            "send_time": "20:00",
+            "timezone": "Asia/Almaty",
+            "last_sent_on": None,
+        }
+    return {
+        "enabled": schedule.enabled,
+        "send_time": schedule.send_time,
+        "timezone": schedule.timezone,
+        "last_sent_on": schedule.last_sent_on,
+    }
+
+
+@app.get("/telegram/schedule", response_model=schemas.TelegramScheduleOut)
+def get_telegram_schedule(db: Session = Depends(get_db)):
+    return telegram_schedule_data(db.get(models.TelegramSchedule, 1))
+
+
+@app.put("/telegram/schedule", response_model=schemas.TelegramScheduleOut)
+def update_telegram_schedule(
+    payload: schemas.TelegramScheduleUpdate,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_telegram_admin),
+):
+    try:
+        ZoneInfo(payload.timezone)
+    except ZoneInfoNotFoundError:
+        raise HTTPException(status_code=422, detail="Неизвестный часовой пояс")
+    if payload.enabled and (
+        not os.getenv("TELEGRAM_BOT_TOKEN") or not os.getenv("TELEGRAM_CHAT_ID")
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail="Сначала настройте TELEGRAM_BOT_TOKEN и TELEGRAM_CHAT_ID в Render",
+        )
+
+    schedule = db.get(models.TelegramSchedule, 1)
+    if schedule is None:
+        schedule = models.TelegramSchedule(id=1)
+        db.add(schedule)
+    schedule.enabled = payload.enabled
+    schedule.send_time = payload.send_time
+    schedule.timezone = payload.timezone
+    db.commit()
+    db.refresh(schedule)
+    return telegram_schedule_data(schedule)
+
+
+@app.post("/telegram/send-report")
+def send_telegram_report(
+    payload: schemas.TelegramReportRequest,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_telegram_admin),
+):
+    schedule = db.get(models.TelegramSchedule, 1)
+    timezone_name = schedule.timezone if schedule else "Asia/Almaty"
+    try:
+        report = build_daily_report(db, payload.report_date, timezone_name)
+        send_telegram_message(report)
+    except (RuntimeError, ValueError) as error:
+        raise HTTPException(status_code=502, detail=str(error))
+    return {"ok": True, "message": "Отчёт отправлен в Telegram"}
 
 
 @app.get(

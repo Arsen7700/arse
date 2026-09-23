@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint, Boolean, Date
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
@@ -69,3 +69,13 @@ class ProductMonthlyGoal(Base):
     month = Column(Integer, nullable=False)
     revenue_goal = Column(Float, nullable=False, default=0)
     quantity_goal = Column(Integer, nullable=False, default=0)
+
+
+class TelegramSchedule(Base):
+    __tablename__ = "telegram_schedule"
+
+    id = Column(Integer, primary_key=True)
+    enabled = Column(Boolean, nullable=False, default=False)
+    send_time = Column(String(5), nullable=False, default="20:00")
+    timezone = Column(String(64), nullable=False, default="Asia/Almaty")
+    last_sent_on = Column(Date, nullable=True)

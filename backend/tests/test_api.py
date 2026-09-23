@@ -8,6 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
 from app.main import app
+import app.main as main_module
 
 
 @pytest.fixture()
@@ -271,3 +272,49 @@ def test_product_goals_are_saved_separately_by_product_and_month(client):
 
     next_month = client.get(f"/product-goals/{year}/{month + 1}").json()
     assert next(row for row in next_month if row["product_id"] == first_product["id"])["revenue_goal"] == 0
+
+
+def test_telegram_schedule_requires_admin_key(client, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_KEY", "test-admin-secret")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "123456")
+    payload = {
+        "enabled": True,
+        "send_time": "21:15",
+        "timezone": "Asia/Almaty",
+    }
+
+    denied = client.put("/telegram/schedule", json=payload)
+    assert denied.status_code == 403
+
+    saved = client.put(
+        "/telegram/schedule",
+        json=payload,
+        headers={"X-Telegram-Admin-Key": "test-admin-secret"},
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["enabled"] is True
+    assert saved.json()["send_time"] == "21:15"
+    assert saved.json()["timezone"] == "Asia/Almaty"
+
+    loaded = client.get("/telegram/schedule")
+    assert loaded.status_code == 200
+    assert loaded.json()["send_time"] == "21:15"
+
+
+def test_manual_telegram_report_uses_admin_key_and_sends_selected_date(client, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_KEY", "test-admin-secret")
+    delivered = []
+    monkeypatch.setattr(main_module, "build_daily_report", lambda db, day, zone: f"report {day} {zone}")
+    monkeypatch.setattr(main_module, "send_telegram_message", delivered.append)
+
+    denied = client.post("/telegram/send-report", json={"report_date": "2026-09-23"})
+    assert denied.status_code == 403
+
+    response = client.post(
+        "/telegram/send-report",
+        json={"report_date": "2026-09-23"},
+        headers={"X-Telegram-Admin-Key": "test-admin-secret"},
+    )
+    assert response.status_code == 200, response.text
+    assert delivered == ["report 2026-09-23 Asia/Almaty"]

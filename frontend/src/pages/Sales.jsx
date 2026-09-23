@@ -14,6 +14,31 @@ const localDateInputValue = (date) => {
   return `${year}-${month}-${day}`;
 };
 
+const dateAtTimezoneUtc = (dateValue, timezone) => {
+  const [year, month, day] = dateValue.split("-").map(Number);
+  const target = Date.UTC(year, month - 1, day);
+  let utc = target;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(new Date(utc));
+    const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+    const observed = Date.UTC(
+      Number(values.year), Number(values.month) - 1, Number(values.day),
+      Number(values.hour), Number(values.minute), Number(values.second)
+    );
+    utc += target - observed;
+  }
+  return new Date(utc);
+};
+
 export default function Sales() {
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
@@ -34,6 +59,13 @@ export default function Sales() {
   const [reportSales, setReportSales] = useState([]);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportMessage, setReportMessage] = useState("");
+  const [reportSending, setReportSending] = useState(false);
+  const [telegramAdminKey, setTelegramAdminKey] = useState("");
+  const [telegramSchedule, setTelegramSchedule] = useState({
+    enabled: false,
+    send_time: "20:00",
+    timezone: "Asia/Almaty",
+  });
 
   const loadProducts = async () => {
     const p = await api.get("/products");
@@ -70,8 +102,9 @@ export default function Sales() {
     const loadReport = async () => {
       if (!reportOpen || !reportDate) return;
       const [year, month, day] = reportDate.split("-").map(Number);
-      const start = new Date(year, month - 1, day);
-      const end = new Date(year, month - 1, day + 1);
+      const nextDate = new Date(Date.UTC(year, month - 1, day + 1)).toISOString().slice(0, 10);
+      const start = dateAtTimezoneUtc(reportDate, telegramSchedule.timezone);
+      const end = dateAtTimezoneUtc(nextDate, telegramSchedule.timezone);
       setReportLoading(true);
       setReportMessage("");
       try {
@@ -87,7 +120,14 @@ export default function Sales() {
       }
     };
     loadReport();
-  }, [reportOpen, reportDate]);
+  }, [reportOpen, reportDate, telegramSchedule.timezone]);
+
+  useEffect(() => {
+    if (!reportOpen) return;
+    api.get("/telegram/schedule")
+      .then((response) => setTelegramSchedule(response.data))
+      .catch(() => setReportMessage("Не удалось загрузить настройки отправки"));
+  }, [reportOpen]);
 
   const selected = useMemo(
     () => products.find((p) => p.id === Number(productId)),
@@ -147,6 +187,47 @@ export default function Sales() {
       "_blank",
       "noopener,noreferrer"
     );
+  };
+
+  const sendReportNow = async () => {
+    if (!telegramAdminKey) {
+      setReportMessage("Введите ключ администратора Telegram из настроек Render");
+      return;
+    }
+    setReportSending(true);
+    setReportMessage("");
+    try {
+      const response = await api.post(
+        "/telegram/send-report",
+        { report_date: reportDate },
+        { headers: { "X-Telegram-Admin-Key": telegramAdminKey } }
+      );
+      setReportMessage(response.data.message);
+    } catch (err) {
+      setReportMessage(err.response?.data?.detail || "Не удалось отправить отчёт");
+    } finally {
+      setReportSending(false);
+    }
+  };
+
+  const saveTelegramSchedule = async (event) => {
+    event.preventDefault();
+    if (!telegramAdminKey) {
+      setReportMessage("Введите ключ администратора Telegram из настроек Render");
+      return;
+    }
+    setReportMessage("");
+    try {
+      const response = await api.put(
+        "/telegram/schedule",
+        telegramSchedule,
+        { headers: { "X-Telegram-Admin-Key": telegramAdminKey } }
+      );
+      setTelegramSchedule(response.data);
+      setReportMessage("Расписание Telegram сохранено");
+    } catch (err) {
+      setReportMessage(err.response?.data?.detail || "Не удалось сохранить расписание");
+    }
   };
 
   const submit = async (e) => {
@@ -466,6 +547,62 @@ export default function Sales() {
               <textarea className="report-text" readOnly value={reportText} />
             )}
             {reportMessage && <div className="notice">{reportMessage}</div>}
+
+            <div className="telegram-settings">
+              <h3>Отправка в Telegram</h3>
+              <label className="telegram-key-label">
+                Ключ администратора
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  placeholder="Задаётся в переменной TELEGRAM_ADMIN_KEY на Render"
+                  value={telegramAdminKey}
+                  onChange={(event) => setTelegramAdminKey(event.target.value)}
+                />
+              </label>
+              <p className="small">Ключ действует только пока открыта эта страница и не сохраняется в браузере.</p>
+              <div className="row report-actions">
+                <button type="button" className="primary" disabled={reportSending || reportLoading} onClick={sendReportNow}>
+                  {reportSending ? "Отправляю…" : "Отправить выбранный день сейчас"}
+                </button>
+              </div>
+
+              <form className="telegram-schedule-form" onSubmit={saveTelegramSchedule}>
+                <label className="telegram-toggle">
+                  <input
+                    type="checkbox"
+                    checked={telegramSchedule.enabled}
+                    onChange={(event) => setTelegramSchedule({ ...telegramSchedule, enabled: event.target.checked })}
+                  />
+                  <span>Отправлять отчёт ежедневно автоматически</span>
+                </label>
+                <div className="telegram-schedule-fields">
+                  <label>
+                    Время отправки
+                    <input
+                      type="time"
+                      value={telegramSchedule.send_time}
+                      onChange={(event) => setTelegramSchedule({ ...telegramSchedule, send_time: event.target.value })}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Часовой пояс
+                    <select
+                      value={telegramSchedule.timezone}
+                      onChange={(event) => setTelegramSchedule({ ...telegramSchedule, timezone: event.target.value })}
+                    >
+                      <option value="Asia/Almaty">Алматы (UTC+5)</option>
+                      <option value="Asia/Bishkek">Бишкек (UTC+6)</option>
+                      <option value="Europe/Moscow">Москва</option>
+                      <option value="UTC">UTC</option>
+                    </select>
+                  </label>
+                </div>
+                <button type="submit" disabled={reportSending}>Сохранить расписание</button>
+                <p className="small">Последняя отправка: {telegramSchedule.last_sent_on || "ещё не отправлялся"}. Время доставки зависит от доступности сервера.</p>
+              </form>
+            </div>
 
             <div className="row report-actions">
               <button type="button" className="primary" disabled={reportLoading} onClick={copyReport}>

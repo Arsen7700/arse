@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, model_validator
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional
 
 class CategoryCreate(BaseModel):
@@ -115,3 +115,17 @@ class ProductGoalOut(BaseModel):
     month: int
     revenue_goal: float
     quantity_goal: int
+
+
+class TelegramScheduleUpdate(BaseModel):
+    enabled: bool
+    send_time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    timezone: str = Field(min_length=1, max_length=64)
+
+
+class TelegramScheduleOut(TelegramScheduleUpdate):
+    last_sent_on: Optional[date] = None
+
+
+class TelegramReportRequest(BaseModel):
+    report_date: date

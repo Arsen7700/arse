@@ -302,6 +302,39 @@ th {
   white-space: pre-wrap;
 }
 
+.telegram-settings {
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid #2a3850;
+  border-radius: 12px;
+  background: #0d1525;
+}
+
+.telegram-settings h3 { margin: 0 0 12px; }
+.telegram-key-label,
+.telegram-schedule-fields label {
+  display: grid;
+  gap: 6px;
+  color: #aab7cb;
+  font-size: 13px;
+}
+.telegram-key-label { max-width: 520px; }
+.telegram-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 12px;
+}
+.telegram-toggle input { width: auto; }
+.telegram-schedule-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 240px));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.telegram-schedule-form > button { margin-top: 2px; }
+.telegram-settings .small { margin: 8px 0; }
+
 .goal-period label {
   display: grid;
   gap: 6px;
@@ -340,7 +373,8 @@ th {
   }
 
   .form-grid,
-  .filters {
+  .filters,
+  .telegram-schedule-fields {
     grid-template-columns: 1fr;
   }
 

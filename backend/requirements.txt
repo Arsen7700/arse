@@ -3,4 +3,6 @@ uvicorn[standard]==0.34.2
 SQLAlchemy==2.0.40
 pydantic==2.11.4
 python-multipart==0.0.20
+python-dotenv>=1.0,<2.0
 psycopg[binary]>=3.2,<4.0
+tzdata>=2025.2,<2027
