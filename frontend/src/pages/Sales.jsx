@@ -4,7 +4,10 @@ import { api } from "../api";
 export default function Sales() {
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
+  const [saleType, setSaleType] = useState("inventory");
   const [productId, setProductId] = useState("");
+  const [manualName, setManualName] = useState("");
+  const [manualSalePrice, setManualSalePrice] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [saleDate, setSaleDate] = useState(
     new Date().toISOString().slice(0, 16)
@@ -26,22 +29,36 @@ export default function Sales() {
     [products, productId]
   );
 
-  const total = selected ? selected.sale_price * Number(quantity || 0) : 0;
-  const profit = selected
-    ? (selected.sale_price - selected.purchase_price) * Number(quantity || 0)
+  const salePrice = saleType === "inventory"
+    ? selected?.sale_price || 0
+    : Number(manualSalePrice || 0);
+  const purchasePrice = saleType === "inventory"
+    ? selected?.purchase_price || 0
     : 0;
+  const total = salePrice * Number(quantity || 0);
+  const profit = (salePrice - purchasePrice) * Number(quantity || 0);
 
   const submit = async (e) => {
     e.preventDefault();
     setMessage("");
     try {
-      await api.post("/sales", {
-        product_id: Number(productId),
+      const payload = {
         quantity: Number(quantity),
         sale_date: new Date(saleDate).toISOString(),
-      });
+      };
+      if (saleType === "inventory") {
+        payload.product_id = Number(productId);
+      } else {
+        payload.product_name = manualName.trim();
+        payload.unit_sale_price = Number(manualSalePrice);
+      }
+      await api.post("/sales", payload);
       setMessage("Продажа сохранена");
       setQuantity(1);
+      if (saleType === "manual") {
+        setManualName("");
+        setManualSalePrice("");
+      }
       load();
     } catch (err) {
       setMessage(err.response?.data?.detail || "Ошибка продажи");
@@ -59,18 +76,55 @@ export default function Sales() {
 
       <div className="card">
         <form className="form-grid" onSubmit={submit}>
-          <select
-            value={productId}
-            onChange={(e) => setProductId(e.target.value)}
-            required
-          >
-            <option value="">Выберите товар</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} — осталось {p.quantity}
-              </option>
-            ))}
-          </select>
+          <div className="row">
+            <button
+              type="button"
+              className={saleType === "inventory" ? "primary" : ""}
+              onClick={() => setSaleType("inventory")}
+            >
+              Со склада
+            </button>
+            <button
+              type="button"
+              className={saleType === "manual" ? "primary" : ""}
+              onClick={() => setSaleType("manual")}
+            >
+              Без добавления товара
+            </button>
+          </div>
+
+          {saleType === "inventory" ? (
+            <select
+              value={productId}
+              onChange={(e) => setProductId(e.target.value)}
+              required
+            >
+              <option value="">Выберите товар со склада</option>
+              {products.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} — осталось {p.quantity}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <>
+              <input
+                placeholder="Название товара"
+                value={manualName}
+                onChange={(e) => setManualName(e.target.value)}
+                required
+              />
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="Цена продажи за единицу"
+                value={manualSalePrice}
+                onChange={(e) => setManualSalePrice(e.target.value)}
+                required
+              />
+            </>
+          )}
 
           <input
             type="number"
@@ -116,7 +170,7 @@ export default function Sales() {
                 return (
                   <tr key={s.id}>
                     <td>{new Date(s.sale_date).toLocaleString("ru-RU")}</td>
-                    <td>{p?.name || `#${s.product_id}`}</td>
+                    <td>{s.product_name || p?.name || "Товар недоступен"}</td>
                     <td>{s.quantity}</td>
                     <td>{s.total_amount} сом</td>
                     <td>{s.profit} сом</td>

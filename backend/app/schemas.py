@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from datetime import datetime
 from typing import Optional
 
@@ -43,13 +43,26 @@ class StockChange(BaseModel):
     amount: int
 
 class SaleCreate(BaseModel):
-    product_id: int
+    product_id: Optional[int] = None
+    product_name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    unit_sale_price: Optional[float] = Field(default=None, gt=0)
     quantity: int = Field(gt=0)
     sale_date: datetime
 
+    @model_validator(mode="after")
+    def validate_sale_source(self):
+        if self.product_id is None:
+            if not self.product_name or not self.product_name.strip() or self.unit_sale_price is None:
+                raise ValueError(
+                    "Для продажи без товара укажите название и цену продажи"
+                )
+            self.product_name = self.product_name.strip()
+        return self
+
 class SaleOut(BaseModel):
     id: int
-    product_id: int
+    product_id: Optional[int]
+    product_name: str
     quantity: int
     unit_sale_price: float
     unit_purchase_price: float

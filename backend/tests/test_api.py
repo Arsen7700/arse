@@ -99,6 +99,34 @@ def test_sale_cannot_exceed_stock(client):
     assert client.get("/sales").json() == []
 
 
+def test_manual_sale_does_not_require_catalog_product_or_change_stock(client):
+    create_product(client, quantity=5)
+    response = client.post(
+        "/sales",
+        json={
+            "product_name": "Разовая услуга",
+            "unit_sale_price": 100,
+            "quantity": 2,
+            "sale_date": datetime.now().isoformat(),
+        },
+    )
+    assert response.status_code == 200, response.text
+    sale = response.json()
+    assert sale["product_id"] is None
+    assert sale["product_name"] == "Разовая услуга"
+    assert sale["total_amount"] == 200
+    assert sale["profit"] == 200
+    assert client.get("/products").json()[0]["quantity"] == 5
+
+
+def test_manual_sale_requires_name_and_sale_price(client):
+    response = client.post(
+        "/sales",
+        json={"quantity": 1, "sale_date": datetime.now().isoformat()},
+    )
+    assert response.status_code == 422
+
+
 def test_goal_upsert_dashboard_and_monthly_report(client):
     product = create_product(client)
     now = datetime.now()

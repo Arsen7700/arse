@@ -10,7 +10,9 @@ from typing import Optional
 
 from .database import Base, engine, get_db
 from . import models, schemas
+from .migrations import migrate_sales_schema
 
+migrate_sales_schema(engine)
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Inventory & Sales API", version="1.0.0")
@@ -145,44 +147,56 @@ def change_stock(product_id: int, payload: schemas.StockChange, db: Session = De
 
 @app.post("/sales", response_model=schemas.SaleOut)
 def create_sale(payload: schemas.SaleCreate, db: Session = Depends(get_db)):
-    product = db.get(models.Product, payload.product_id)
-    if not product:
-        raise HTTPException(status_code=404, detail="Товар не найден")
+    product = None
+    if payload.product_id is not None:
+        product = db.get(models.Product, payload.product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Товар не найден")
+        product_name = product.name
+        sale_price = product.sale_price
+        purchase_price = product.purchase_price
+    else:
+        product_name = payload.product_name.strip()
+        sale_price = payload.unit_sale_price
+        purchase_price = 0
+
     total = float(
-        (Decimal(str(product.sale_price)) * payload.quantity).quantize(
+        (Decimal(str(sale_price)) * payload.quantity).quantize(
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
     )
     profit = float(
         (
-            (Decimal(str(product.sale_price)) - Decimal(str(product.purchase_price)))
+            (Decimal(str(sale_price)) - Decimal(str(purchase_price)))
             * payload.quantity
         ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     )
 
     sale = models.Sale(
-        product_id=product.id,
+        product_id=product.id if product else None,
+        product_name=product_name,
         quantity=payload.quantity,
-        unit_sale_price=product.sale_price,
-        unit_purchase_price=product.purchase_price,
+        unit_sale_price=sale_price,
+        unit_purchase_price=purchase_price,
         total_amount=total,
         profit=profit,
         sale_date=payload.sale_date,
     )
 
-    # Conditional SQL update makes stock validation and decrement atomic, including
-    # when multiple sales arrive concurrently.
-    result = db.execute(
-        update(models.Product)
-        .where(
-            models.Product.id == product.id,
-            models.Product.quantity >= payload.quantity,
+    if product:
+        # Conditional SQL update makes stock validation and decrement atomic, including
+        # when multiple sales arrive concurrently.
+        result = db.execute(
+            update(models.Product)
+            .where(
+                models.Product.id == product.id,
+                models.Product.quantity >= payload.quantity,
+            )
+            .values(quantity=models.Product.quantity - payload.quantity)
         )
-        .values(quantity=models.Product.quantity - payload.quantity)
-    )
-    if not result.rowcount:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Недостаточно товара на складе")
+        if not result.rowcount:
+            db.rollback()
+            raise HTTPException(status_code=400, detail="Недостаточно товара на складе")
     db.add(sale)
     try:
         db.commit()
