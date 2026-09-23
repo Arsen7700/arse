@@ -14,6 +14,12 @@ import {
 } from "recharts";
 
 const money = (value) => `${Number(value || 0).toLocaleString("ru-RU")} сом`;
+const localDateValue = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 export default function Dashboard() {
   const now = new Date();
@@ -21,6 +27,11 @@ export default function Dashboard() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [data, setData] = useState(null);
   const [monthly, setMonthly] = useState([]);
+  const [selectedDay, setSelectedDay] = useState(() => localDateValue(new Date()));
+  const [daySales, setDaySales] = useState([]);
+  const [dayProducts, setDayProducts] = useState([]);
+  const [dayLoading, setDayLoading] = useState(true);
+  const [dayError, setDayError] = useState("");
 
   const load = async () => {
     const [d, m] = await Promise.all([
@@ -34,6 +45,58 @@ export default function Dashboard() {
   useEffect(() => {
     load();
   }, [year, month]);
+
+  useEffect(() => {
+    const loadDay = async () => {
+      if (!selectedDay) return;
+      const [selectedYear, selectedMonth, selectedDate] = selectedDay.split("-").map(Number);
+      const start = new Date(selectedYear, selectedMonth - 1, selectedDate);
+      const end = new Date(selectedYear, selectedMonth - 1, selectedDate + 1);
+      setDayLoading(true);
+      setDayError("");
+      try {
+        const response = await api.get("/sales", {
+          params: { start: start.toISOString(), end: end.toISOString() },
+        });
+        setDaySales(response.data);
+        const grouped = new Map();
+        response.data.forEach((sale) => {
+          const name = sale.product_name || `Товар ${sale.product_id ?? "без каталога"}`;
+          const item = grouped.get(name) || {
+            product_name: name,
+            sold_quantity: 0,
+            revenue: 0,
+            profit: 0,
+            transactions: 0,
+          };
+          item.sold_quantity += sale.quantity;
+          item.revenue += sale.total_amount;
+          item.profit += sale.profit;
+          item.transactions += 1;
+          grouped.set(name, item);
+        });
+        setDayProducts(
+          [...grouped.values()].sort((a, b) => a.product_name.localeCompare(b.product_name, "ru"))
+        );
+      } catch (err) {
+        setDayError(err.response?.data?.detail || "Не удалось загрузить статистику за день");
+        setDaySales([]);
+        setDayProducts([]);
+      } finally {
+        setDayLoading(false);
+      }
+    };
+    loadDay();
+  }, [selectedDay]);
+
+  const daySummary = daySales.reduce(
+    (summary, sale) => ({
+      revenue: summary.revenue + sale.total_amount,
+      profit: summary.profit + sale.profit,
+      quantity: summary.quantity + sale.quantity,
+    }),
+    { revenue: 0, profit: 0, quantity: 0 }
+  );
 
   if (!data) return <div>Загрузка...</div>;
 
@@ -98,6 +161,60 @@ export default function Dashboard() {
                 <tr>
                   <td colSpan="5">Товары пока не добавлены</td>
                 </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="history-toolbar">
+          <div>
+            <div className="section-title">Статистика за день</div>
+            <label>
+              Выберите день
+              <input
+                type="date"
+                value={selectedDay}
+                onChange={(event) => setSelectedDay(event.target.value)}
+              />
+            </label>
+          </div>
+          {dayError && <div className="notice">{dayError}</div>}
+        </div>
+
+        <div className="stats-grid daily-stats-grid">
+          <StatCard title="Выручка за день" value={money(daySummary.revenue)} />
+          <StatCard title="Прибыль за день" value={money(daySummary.profit)} />
+          <StatCard title="Продано за день" value={daySummary.quantity} />
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Товар</th>
+                <th>Продано</th>
+                <th>Выручка</th>
+                <th>Прибыль</th>
+                <th>Количество продаж</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dayLoading ? (
+                <tr><td colSpan="5">Загрузка статистики...</td></tr>
+              ) : dayProducts.length ? (
+                dayProducts.map((item) => (
+                  <tr key={item.product_name}>
+                    <td>{item.product_name}</td>
+                    <td>{item.sold_quantity}</td>
+                    <td>{money(item.revenue)}</td>
+                    <td>{money(item.profit)}</td>
+                    <td>{item.transactions}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr><td colSpan="5">За выбранный день продаж нет</td></tr>
               )}
             </tbody>
           </table>
