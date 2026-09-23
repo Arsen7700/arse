@@ -121,6 +121,9 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
             detail="Нельзя удалить товар, по которому уже есть продажи"
         )
 
+    db.query(models.ProductMonthlyGoal).filter(
+        models.ProductMonthlyGoal.product_id == product_id
+    ).delete(synchronize_session=False)
     db.delete(product)
     db.commit()
     return {"ok": True}
@@ -341,6 +344,66 @@ def get_goal(year: int, month: int, db: Session = Depends(get_db)):
         "month": goal.month,
         "revenue_goal": goal.revenue_goal,
         "quantity_goal": goal.quantity_goal
+    }
+
+
+@app.get(
+    "/product-goals/{year}/{month}",
+    response_model=list[schemas.ProductGoalOut],
+)
+def list_product_goals(year: int, month: int, db: Session = Depends(get_db)):
+    if not 2000 <= year <= 2100 or not 1 <= month <= 12:
+        raise HTTPException(status_code=422, detail="Некорректный год или месяц")
+
+    rows = db.query(models.Product, models.ProductMonthlyGoal).outerjoin(
+        models.ProductMonthlyGoal,
+        (models.ProductMonthlyGoal.product_id == models.Product.id)
+        & (models.ProductMonthlyGoal.year == year)
+        & (models.ProductMonthlyGoal.month == month),
+    ).order_by(models.Product.name).all()
+
+    return [
+        {
+            "product_id": product.id,
+            "product_name": product.name,
+            "year": year,
+            "month": month,
+            "revenue_goal": goal.revenue_goal if goal else 0,
+            "quantity_goal": goal.quantity_goal if goal else 0,
+        }
+        for product, goal in rows
+    ]
+
+
+@app.put("/product-goals", response_model=schemas.ProductGoalOut)
+def upsert_product_goal(
+    payload: schemas.ProductGoalCreate, db: Session = Depends(get_db)
+):
+    product = db.get(models.Product, payload.product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Товар не найден")
+
+    goal = db.query(models.ProductMonthlyGoal).filter_by(
+        product_id=payload.product_id,
+        year=payload.year,
+        month=payload.month,
+    ).first()
+    if goal:
+        goal.revenue_goal = payload.revenue_goal
+        goal.quantity_goal = payload.quantity_goal
+    else:
+        goal = models.ProductMonthlyGoal(**payload.model_dump())
+        db.add(goal)
+
+    db.commit()
+    db.refresh(goal)
+    return {
+        "product_id": product.id,
+        "product_name": product.name,
+        "year": goal.year,
+        "month": goal.month,
+        "revenue_goal": goal.revenue_goal,
+        "quantity_goal": goal.quantity_goal,
     }
 
 @app.get("/dashboard")

@@ -47,6 +47,7 @@ PUT/DELETE        /products/{id}
 PATCH             /products/{id}/stock
 GET/POST          /sales
 GET/PUT           /goals/{year}/{month}, /goals
+GET/PUT           /product-goals/{year}/{month}, /product-goals
 GET               /dashboard
 GET               /reports/monthly
 POST              /seed (только если APP_ENV не production)

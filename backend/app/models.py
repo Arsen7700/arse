@@ -53,3 +53,19 @@ class MonthlyGoal(Base):
     month = Column(Integer, nullable=False)
     revenue_goal = Column(Float, nullable=False, default=0)
     quantity_goal = Column(Integer, nullable=False, default=0)
+
+
+class ProductMonthlyGoal(Base):
+    __tablename__ = "product_monthly_goals"
+    __table_args__ = (
+        UniqueConstraint(
+            "product_id", "year", "month", name="uq_product_goal_month"
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
+    year = Column(Integer, nullable=False)
+    month = Column(Integer, nullable=False)
+    revenue_goal = Column(Float, nullable=False, default=0)
+    quantity_goal = Column(Integer, nullable=False, default=0)

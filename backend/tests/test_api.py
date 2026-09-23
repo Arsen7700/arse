@@ -238,3 +238,36 @@ def test_goal_upsert_dashboard_and_monthly_report(client):
     report = client.get("/reports/monthly")
     assert report.status_code == 200
     assert report.json()[0]["month"] == now.strftime("%Y-%m")
+
+
+def test_product_goals_are_saved_separately_by_product_and_month(client):
+    first_product = create_product(client)
+    second_product = client.post(
+        "/products",
+        json={"name": "Другой товар", "sale_price": 30, "quantity": 4},
+    ).json()
+    year, month = 2026, 9
+
+    saved = client.put(
+        "/product-goals",
+        json={
+            "product_id": first_product["id"],
+            "year": year,
+            "month": month,
+            "revenue_goal": 500,
+            "quantity_goal": 10,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["product_name"] == "Тестовый товар"
+
+    goals = client.get(f"/product-goals/{year}/{month}").json()
+    first_goal = next(row for row in goals if row["product_id"] == first_product["id"])
+    second_goal = next(row for row in goals if row["product_id"] == second_product["id"])
+    assert first_goal["revenue_goal"] == 500
+    assert first_goal["quantity_goal"] == 10
+    assert second_goal["revenue_goal"] == 0
+    assert second_goal["quantity_goal"] == 0
+
+    next_month = client.get(f"/product-goals/{year}/{month + 1}").json()
+    assert next(row for row in next_month if row["product_id"] == first_product["id"])["revenue_goal"] == 0

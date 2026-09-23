@@ -98,3 +98,20 @@ class GoalCreate(BaseModel):
 class GoalOut(GoalCreate):
     id: int
     model_config = {"from_attributes": True}
+
+
+class ProductGoalCreate(BaseModel):
+    product_id: int = Field(gt=0)
+    year: int = Field(ge=2000, le=2100)
+    month: int = Field(ge=1, le=12)
+    revenue_goal: float = Field(ge=0)
+    quantity_goal: int = Field(ge=0)
+
+
+class ProductGoalOut(BaseModel):
+    product_id: int
+    product_name: str
+    year: int
+    month: int
+    revenue_goal: float
+    quantity_goal: int
