@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api";
+import { useAuth } from "../auth";
 
 const REPORT_SALE_PRESETS = [
   "SA",
@@ -71,7 +72,11 @@ const dateAtTimezoneUtc = (dateValue, timezone) => {
 };
 
 export default function Sales() {
+  const user = useAuth();
+  const readOnly = user?.role === "lead";
+  const isAdmin = user?.role === "admin";
   const [products, setProducts] = useState([]);
+  const [stores, setStores] = useState([]);
   const [sales, setSales] = useState([]);
   const [saleType, setSaleType] = useState("inventory");
   const [inventoryItems, setInventoryItems] = useState([
@@ -80,6 +85,7 @@ export default function Sales() {
   const [manualName, setManualName] = useState("");
   const [manualNameCustom, setManualNameCustom] = useState(false);
   const [manualSalePrice, setManualSalePrice] = useState("");
+  const [manualSaleStoreId, setManualSaleStoreId] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [saleDate, setSaleDate] = useState(() => toLocalDateTime(new Date()));
   const [message, setMessage] = useState("");
@@ -131,6 +137,12 @@ export default function Sales() {
   }, []);
 
   useEffect(() => {
+    if (isAdmin) {
+      api.get("/stores").then((response) => setStores(response.data)).catch(() => {});
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
     if (historyOpen) loadHistory();
   }, [historyOpen, historyDate]);
 
@@ -171,11 +183,11 @@ export default function Sales() {
   }, [reportOpen, reportPeriod, reportDate, reportMonth, telegramSchedule.timezone]);
 
   useEffect(() => {
-    if (!reportOpen) return;
+    if (!reportOpen || !isAdmin) return;
     api.get("/telegram/schedule")
       .then((response) => setTelegramSchedule(response.data))
       .catch(() => setReportMessage("Не удалось загрузить настройки отправки"));
-  }, [reportOpen]);
+  }, [reportOpen, isAdmin]);
 
   const inventoryTotal = inventoryItems.reduce((sum, line) => {
     const product = products.find((item) => item.id === Number(line.product_id));
@@ -322,6 +334,7 @@ export default function Sales() {
         };
         payload.product_name = manualName.trim();
         payload.unit_sale_price = salePrice;
+        if (isAdmin && manualSaleStoreId) payload.store_id = Number(manualSaleStoreId);
         await api.post("/sales", payload);
         setMessage("Продажа сохранена");
         setQuantity(1);
@@ -385,7 +398,7 @@ export default function Sales() {
       <div className="page-header">
         <div>
           <h1>Продажи</h1>
-          <p className="muted">Регистрация продаж</p>
+          <p className="muted">{readOnly ? "Просмотр продаж сотрудников" : "Регистрация ваших продаж"}</p>
         </div>
         <div className="row sales-page-actions">
           <button type="button" onClick={() => setHistoryOpen(true)}>
@@ -397,7 +410,7 @@ export default function Sales() {
         </div>
       </div>
 
-      <div className="card">
+      {!readOnly && <div className="card">
         <form className="form-grid" onSubmit={submit}>
           <div className="row">
             <button
@@ -508,6 +521,12 @@ export default function Sales() {
                   required
                 />
               )}
+              {isAdmin && (
+                <select value={manualSaleStoreId} onChange={(event) => setManualSaleStoreId(event.target.value)}>
+                  <option value="">Основная лавочка</option>
+                  {stores.filter((store) => store.is_active).map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
+                </select>
+              )}
               <input
                 type="number"
                 min="0"
@@ -545,7 +564,7 @@ export default function Sales() {
           </button>
         </form>
         {message && <div className="notice">{message}</div>}
-      </div>
+      </div>}
 
       {historyOpen && (
         <div
@@ -634,12 +653,13 @@ export default function Sales() {
                     <th>Кол-во</th>
                     <th>Сумма</th>
                     <th>Прибыль</th>
-                    <th>Действия</th>
+                    {(readOnly || isAdmin) && <><th>Сотрудник</th><th>Лавочка</th></>}
+                    {!readOnly && <th>Действия</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {historyLoading ? (
-                    <tr><td colSpan="6">Загрузка истории...</td></tr>
+                    <tr><td colSpan={readOnly ? 7 : isAdmin ? 8 : 6}>Загрузка истории...</td></tr>
                   ) : sales.length ? (
                     sales.map((sale) => (
                       <tr key={sale.id}>
@@ -648,14 +668,15 @@ export default function Sales() {
                         <td>{sale.quantity}</td>
                         <td>{sale.total_amount} сом</td>
                         <td>{sale.profit} сом</td>
-                        <td className="actions">
+                        {(readOnly || isAdmin) && <><td>{sale.seller_name || "Не указан"}</td><td>{sale.store_name || "—"}</td></>}
+                        {!readOnly && <td className="actions">
                           <button type="button" onClick={() => beginEdit(sale)}>Изменить</button>
                           <button type="button" className="danger" onClick={() => deleteSale(sale.id)}>Удалить</button>
-                        </td>
+                        </td>}
                       </tr>
                     ))
                   ) : (
-                    <tr><td colSpan="6">За выбранный день продаж нет</td></tr>
+                    <tr><td colSpan={readOnly ? 7 : isAdmin ? 8 : 6}>За выбранный день продаж нет</td></tr>
                   )}
                 </tbody>
               </table>
@@ -715,7 +736,7 @@ export default function Sales() {
             )}
             {reportMessage && <div className="notice">{reportMessage}</div>}
 
-            <div className="telegram-settings">
+            {isAdmin && <div className="telegram-settings">
               <h3>Отправка в Telegram</h3>
               <label className="telegram-key-label">
                 Ключ администратора
@@ -769,7 +790,7 @@ export default function Sales() {
                 <button type="submit" disabled={reportSending}>Сохранить расписание</button>
                 <p className="small">Последняя отправка: {telegramSchedule.last_sent_on || "ещё не отправлялся"}. Время доставки зависит от доступности сервера.</p>
               </form>
-            </div>
+            </div>}
 
             <div className="row report-actions">
               <button type="button" className="primary" disabled={reportLoading} onClick={copyReport}>

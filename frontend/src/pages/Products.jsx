@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api";
+import { useAuth } from "../auth";
 
 const emptyForm = {
   name: "",
@@ -8,11 +9,16 @@ const emptyForm = {
   quantity: 0,
   description: "",
   image_url: "",
+  store_id: "",
 };
 
 export default function Products() {
+  const user = useAuth();
+  const readOnly = user?.role === "lead";
+  const isAdmin = user?.role === "admin";
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [stores, setStores] = useState([]);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState(null);
   const [search, setSearch] = useState("");
@@ -37,6 +43,10 @@ export default function Products() {
     load();
   }, [search, categoryFilter]);
 
+  useEffect(() => {
+    api.get("/stores").then((response) => setStores(response.data)).catch(() => {});
+  }, []);
+
   const save = async (e) => {
     e.preventDefault();
     setMessage("");
@@ -46,6 +56,7 @@ export default function Products() {
       sale_price: Number(form.sale_price),
       quantity: Number(form.quantity),
     };
+    if (!isAdmin) delete payload.store_id;
 
     try {
       if (editingId) {
@@ -72,6 +83,7 @@ export default function Products() {
       quantity: p.quantity,
       description: p.description || "",
       image_url: p.image_url || "",
+      store_id: p.store_id || "",
     });
   };
 
@@ -98,11 +110,11 @@ export default function Products() {
       <div className="page-header">
         <div>
           <h1>Товары</h1>
-          <p className="muted">Управление складом</p>
+          <p className="muted">{readOnly ? "Просмотр товаров всех лавочек" : "Управление товарами вашей лавочки"}</p>
         </div>
       </div>
 
-      <div className="card">
+      {!readOnly && <div className="card">
         <div className="section-title">
           {editingId ? "Редактировать товар" : "Добавить товар"}
         </div>
@@ -125,6 +137,12 @@ export default function Products() {
               </option>
             ))}
           </select>
+          {isAdmin && (
+            <select value={form.store_id} onChange={(e) => setForm({ ...form, store_id: e.target.value })}>
+              <option value="">Основная лавочка</option>
+              {stores.filter((store) => store.is_active).map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
+            </select>
+          )}
           <input
             type="number"
             min="0"
@@ -134,13 +152,13 @@ export default function Products() {
             onChange={(e) => setForm({ ...form, sale_price: e.target.value })}
             required
           />
-          <input
+          {isAdmin && <input
             type="number"
             min="0"
             placeholder="Количество"
             value={form.quantity}
             onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-          />
+          />}
           <input
             placeholder="URL фото (необязательно)"
             value={form.image_url}
@@ -169,7 +187,7 @@ export default function Products() {
           </div>
         </form>
         {message && <div className="notice">{message}</div>}
-      </div>
+      </div>}
 
       <div className="card">
         <div className="filters">
@@ -196,25 +214,27 @@ export default function Products() {
             <thead>
               <tr>
                 <th>Название</th>
+                {(isAdmin || readOnly) && <th>Лавочка</th>}
                 <th>Продажа</th>
                 <th>Остаток</th>
-                <th>Действия</th>
+                {!readOnly && <th>Действия</th>}
               </tr>
             </thead>
             <tbody>
               {products.map((p) => (
                 <tr key={p.id}>
                   <td>{p.name}</td>
+                  {(isAdmin || readOnly) && <td>{stores.find((store) => store.id === p.store_id)?.name || `Лавочка ${p.store_id}`}</td>}
                   <td>{p.sale_price} сом</td>
                   <td>{p.quantity}</td>
-                  <td className="actions">
-                    <button onClick={() => changeStock(p.id, 1)}>+1</button>
-                    <button onClick={() => changeStock(p.id, -1)}>-1</button>
+                  {!readOnly && <td className="actions">
+                    {isAdmin && <><button onClick={() => changeStock(p.id, 1)}>+1</button>
+                    <button onClick={() => changeStock(p.id, -1)}>-1</button></>}
                     <button onClick={() => edit(p)}>Изменить</button>
                     <button className="danger" onClick={() => remove(p.id)}>
                       Удалить
                     </button>
-                  </td>
+                  </td>}
                 </tr>
               ))}
             </tbody>

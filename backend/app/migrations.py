@@ -1,6 +1,6 @@
 """Small, data-preserving schema migration for manual sales."""
 
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 
 
@@ -25,6 +25,68 @@ def migrate_sales_schema(engine: Engine) -> None:
     else:
         raise RuntimeError(
             f"Automatic sales migration is not supported for {engine.dialect.name}"
+        )
+
+
+def migrate_store_and_staff_schema(engine: Engine) -> None:
+    """Add shop ownership and seller attribution without dropping existing records."""
+    inspector = inspect(engine)
+    if not inspector.has_table("stores"):
+        return  # create_all must run first.
+
+    with engine.begin() as connection:
+        store_id = connection.execute(
+            text("SELECT id FROM stores WHERE name = :name"),
+            {"name": "Основная лавочка"},
+        ).scalar_one_or_none()
+        if store_id is None:
+            result = connection.exec_driver_sql(
+                "INSERT INTO stores (name, is_active, created_at) "
+                "VALUES ('Основная лавочка', TRUE, CURRENT_TIMESTAMP)"
+            )
+            store_id = result.lastrowid
+            if store_id is None:
+                store_id = connection.exec_driver_sql(
+                    "SELECT id FROM stores WHERE name = 'Основная лавочка'"
+                ).scalar_one()
+
+        columns_by_table = {
+            "products": {column["name"] for column in inspect(connection).get_columns("products")},
+            "sales": {column["name"] for column in inspect(connection).get_columns("sales")},
+        }
+        if engine.dialect.name not in {"sqlite", "postgresql"}:
+            raise RuntimeError(
+                f"Automatic store migration is not supported for {engine.dialect.name}"
+            )
+
+        for table in ("products", "sales"):
+            if "store_id" not in columns_by_table[table]:
+                connection.exec_driver_sql(
+                    f"ALTER TABLE {table} ADD COLUMN store_id INTEGER "
+                    "REFERENCES stores(id)"
+                )
+        if "created_by_telegram_id" not in columns_by_table["sales"]:
+            connection.exec_driver_sql(
+                "ALTER TABLE sales ADD COLUMN created_by_telegram_id BIGINT"
+            )
+
+        connection.execute(
+            text("UPDATE products SET store_id = :store_id WHERE store_id IS NULL"),
+            {"store_id": store_id},
+        )
+        connection.execute(
+            text("UPDATE sales SET store_id = :store_id WHERE store_id IS NULL"),
+            {"store_id": store_id},
+        )
+        connection.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_products_store_id ON products (store_id)"
+        )
+        connection.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_sales_store_id ON sales (store_id)"
+        )
+        connection.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_sales_created_by_telegram_id "
+            "ON sales (created_by_telegram_id)"
         )
 
 

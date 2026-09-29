@@ -12,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
+from app.access import CurrentUser, current_user
 from app.main import app
 import app.main as main_module
 
@@ -25,6 +26,7 @@ def client(monkeypatch):
         poolclass=StaticPool,
     )
     TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    monkeypatch.setattr(main_module, "SessionLocal", TestingSession)
     Base.metadata.create_all(bind=engine)
 
     def override_get_db():
@@ -57,6 +59,7 @@ def signed_telegram_init_data(bot_token, user_id):
 def test_production_api_requires_valid_allowed_telegram_user(client, monkeypatch):
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-bot-token")
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "")
     monkeypatch.setenv("TELEGRAM_ALLOWED_USER_IDS", "12345")
 
     missing = client.get(
@@ -78,6 +81,49 @@ def test_production_api_requires_valid_allowed_telegram_user(client, monkeypatch
     assert authorized_user.status_code == 200, authorized_user.text
 
 
+def test_production_admin_can_invite_telegram_specialist(client, monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-bot-token")
+    monkeypatch.setenv("TELEGRAM_ADMIN_IDS", "50001")
+    admin_headers = {
+        "X-Telegram-Init-Data": signed_telegram_init_data("test-bot-token", 50001)
+    }
+    store = client.post("/admin/stores", json={"name": "Тестовая лавочка"}, headers=admin_headers)
+    assert store.status_code == 200, store.text
+    store_id = store.json()["id"]
+    added = client.post(
+        "/admin/users",
+        json={
+            "telegram_id": 50002,
+            "display_name": "Специалист",
+            "role": "specialist",
+            "store_id": store_id,
+        },
+        headers=admin_headers,
+    )
+    assert added.status_code == 200, added.text
+    specialist_headers = {
+        "X-Telegram-Init-Data": signed_telegram_init_data("test-bot-token", 50002)
+    }
+    assert client.get("/auth/me", headers=specialist_headers).json()["role"] == "specialist"
+    created = client.post(
+        "/products",
+        json={"name": "Товар специалиста", "sale_price": 50, "quantity": 20},
+        headers=specialist_headers,
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["quantity"] == 0
+    assert client.patch(
+        f"/products/{created.json()['id']}/stock",
+        json={"amount": 3},
+        headers=specialist_headers,
+    ).status_code == 403
+    uninvited_headers = {
+        "X-Telegram-Init-Data": signed_telegram_init_data("test-bot-token", 50003)
+    }
+    assert client.get("/products", headers=uninvited_headers).status_code == 403
+
+
 def create_product(client, *, quantity=5, purchase_price=10, sale_price=25):
     response = client.post(
         "/products",
@@ -90,6 +136,134 @@ def create_product(client, *, quantity=5, purchase_price=10, sale_price=25):
     )
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def test_shop_scoping_specialist_permissions_and_lead_reports(client):
+    first_product = create_product(client)
+    first_store_id = first_product["store_id"]
+    second_store = client.post("/admin/stores", json={"name": "Вторая лавочка"})
+    assert second_store.status_code == 200, second_store.text
+    second_store_id = second_store.json()["id"]
+    second_product_response = client.post(
+        "/products",
+        json={
+            "name": "Товар второй лавочки",
+            "sale_price": 40,
+            "quantity": 6,
+            "store_id": second_store_id,
+        },
+    )
+    assert second_product_response.status_code == 200, second_product_response.text
+    second_product = second_product_response.json()
+    for telegram_id, store_id in ((10101, first_store_id), (20202, first_store_id), (30303, second_store_id)):
+        created_account = client.post(
+            "/admin/users",
+            json={
+                "telegram_id": telegram_id,
+                "display_name": f"Сотрудник {telegram_id}",
+                "role": "specialist",
+                "store_id": store_id,
+            },
+        )
+        assert created_account.status_code == 200, created_account.text
+
+    def use_user(user_id, role, store_id=None):
+        app.dependency_overrides[current_user] = lambda: CurrentUser(
+            user_id, f"Сотрудник {user_id}", role, store_id
+        )
+
+    try:
+        use_user(10101, "specialist", first_store_id)
+        own_product = client.post(
+            "/products",
+            json={"name": "Новый товар", "sale_price": 12, "quantity": 99},
+        )
+        assert own_product.status_code == 200, own_product.text
+        assert own_product.json()["quantity"] == 0
+        assert own_product.json()["store_id"] == first_store_id
+
+        outsider = client.get("/products", params={"store_id": second_store_id})
+        assert outsider.status_code == 403
+        assert client.get("/products").json()
+
+        sale = client.post(
+            "/sales",
+            json={
+                "product_id": first_product["id"],
+                "quantity": 1,
+                "sale_date": datetime.now().isoformat(),
+            },
+        )
+        assert sale.status_code == 200, sale.text
+        sale_id = sale.json()["id"]
+        assert sale.json()["created_by_telegram_id"] == 10101
+        assert client.patch(
+            f"/products/{first_product['id']}/stock", json={"amount": 1}
+        ).status_code == 403
+
+        use_user(20202, "specialist", first_store_id)
+        assert client.get("/sales").json() == []
+        assert client.put(
+            f"/sales/{sale_id}", json={"quantity": 2}
+        ).status_code == 403
+
+        use_user(30303, "specialist", second_store_id)
+        second_sale = client.post(
+            "/sales",
+            json={
+                "product_id": second_product["id"],
+                "quantity": 2,
+                "sale_date": datetime.now().isoformat(),
+            },
+        )
+        assert second_sale.status_code == 200, second_sale.text
+
+        use_user(40404, "lead")
+        report = client.get("/reports/staff")
+        assert report.status_code == 200, report.text
+        assert len(report.json()) == 3
+        assert sum(row["sold_quantity"] for row in report.json()) == 3
+        second_specialist = next(row for row in report.json() if row["telegram_id"] == 30303)
+        assert second_specialist["products"][0]["product_name"] == "Товар второй лавочки"
+        assert second_specialist["products"][0]["sold_quantity"] == 2
+        assert len(client.get("/products").json()) == 3
+        assert client.post(
+            "/sales", json={"product_id": first_product["id"], "quantity": 1}
+        ).status_code == 403
+        assert client.get("/admin/users").status_code == 403
+    finally:
+        app.dependency_overrides.pop(current_user, None)
+
+
+def test_admin_can_manage_stores_and_telegram_accounts(client):
+    store = client.post("/admin/stores", json={"name": "Центр"})
+    assert store.status_code == 200, store.text
+    store_id = store.json()["id"]
+    account = client.post(
+        "/admin/users",
+        json={
+            "telegram_id": 50505,
+            "display_name": "Новый специалист",
+            "role": "specialist",
+            "store_id": store_id,
+        },
+    )
+    assert account.status_code == 200, account.text
+    assert account.json()["store_name"] == "Центр"
+    assert client.post(
+        "/admin/users",
+        json={
+            "telegram_id": 50505,
+            "display_name": "Дубликат",
+            "role": "specialist",
+            "store_id": store_id,
+        },
+    ).status_code == 409
+    updated = client.put(
+        "/admin/users/50505", json={"is_active": False}
+    )
+    assert updated.status_code == 200
+    assert updated.json()["is_active"] is False
 
 
 def test_product_can_be_created_without_purchase_price(client):

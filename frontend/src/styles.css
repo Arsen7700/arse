@@ -799,3 +799,70 @@ tbody tr:hover { background: rgba(255, 255, 255, .025); }
   th, td { padding: 12px 10px; }
   .modal-backdrop { z-index: 1000; }
 }
+
+.account-chip {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  min-height: 34px;
+  margin: -7px 0 16px;
+  color: #aeb3bd;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.account-avatar {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid rgba(112, 165, 255, .38);
+  border-radius: 50%;
+  background: linear-gradient(145deg, #677cf7, #378eea);
+  color: #fff;
+  font-size: 13px;
+}
+
+.admin-create-row { align-items: stretch; margin: 14px 0 16px; }
+.admin-create-row input { flex: 1; }
+.admin-store-list { display: grid; gap: 9px; }
+.admin-store-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #292c34;
+  border-radius: 14px;
+  background: #111318;
+}
+.admin-active-toggle { display: flex; align-items: center; gap: 7px; white-space: nowrap; color: #b5bbc5; }
+.admin-active-toggle input { width: 18px; min-height: 18px; height: 18px; margin: 0; accent-color: #347fff; }
+.admin-account-form { margin-top: 14px; }
+.admin-staff-table input, .admin-staff-table select { min-width: 135px; }
+.admin-permissions-note p { margin: 9px 0; color: #aab0ba; line-height: 1.5; }
+.admin-permissions-note strong { color: #f4f6fa; }
+.admin-error { background: #3a1b20; border-color: #693038; }
+.team-report-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.team-report-filters label { display: grid; gap: 7px; color: #aeb4bf; font-size: 13px; }
+.team-summary-grid .stat-value { font-size: clamp(18px, 2.5vw, 25px); }
+.nav-count-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.sidebar nav.nav-count-5 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+.staff-product-details { min-width: 160px; }
+.staff-product-details summary { color: #8db9ff; cursor: pointer; font-weight: 650; }
+.staff-product-details ul { min-width: 250px; padding-left: 18px; color: #afb5bf; line-height: 1.55; }
+
+@media (max-width: 650px) {
+  .account-chip { margin: -5px 2px 12px; font-size: 12px; }
+  .admin-create-row { flex-direction: column; }
+  .admin-store-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .admin-store-row > button { grid-column: 1 / -1; }
+  .team-report-filters { grid-template-columns: 1fr; }
+  .nav-count-5 { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+  .nav-count-5 a { font-size: 9px; }
+}

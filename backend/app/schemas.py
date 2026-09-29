@@ -2,6 +2,45 @@ from pydantic import BaseModel, Field, model_validator
 from datetime import datetime, date
 from typing import Optional, Literal
 
+
+class StoreCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class StoreOut(StoreCreate):
+    id: int
+    is_active: bool
+    model_config = {"from_attributes": True}
+
+
+class StoreUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    is_active: Optional[bool] = None
+
+
+class StaffAccountCreate(BaseModel):
+    telegram_id: int = Field(gt=0)
+    display_name: str = Field(min_length=1, max_length=200)
+    role: Literal["specialist", "lead", "admin"] = "specialist"
+    store_id: Optional[int] = None
+    is_active: bool = True
+
+
+class StaffAccountUpdate(BaseModel):
+    display_name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    role: Optional[Literal["specialist", "lead", "admin"]] = None
+    store_id: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
+class StaffAccountOut(BaseModel):
+    telegram_id: int
+    display_name: str
+    role: str
+    store_id: Optional[int]
+    store_name: Optional[str] = None
+    is_active: bool
+
 class CategoryCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
 
@@ -17,6 +56,7 @@ class ProductCreate(BaseModel):
     quantity: int = Field(ge=0)
     description: Optional[str] = None
     image_url: Optional[str] = None
+    store_id: Optional[int] = None
 
 class ProductUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
@@ -29,6 +69,7 @@ class ProductUpdate(BaseModel):
 
 class ProductOut(BaseModel):
     id: int
+    store_id: int
     name: str
     category_id: Optional[int]
     purchase_price: float
@@ -44,6 +85,7 @@ class StockChange(BaseModel):
 
 class SaleCreate(BaseModel):
     product_id: Optional[int] = None
+    store_id: Optional[int] = None
     product_name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     unit_sale_price: Optional[float] = Field(default=None, ge=0)
     total_amount: Optional[float] = Field(default=None, ge=0)
@@ -91,6 +133,10 @@ class SaleUpdate(BaseModel):
 
 class SaleOut(BaseModel):
     id: int
+    store_id: int
+    created_by_telegram_id: Optional[int]
+    store_name: Optional[str] = None
+    seller_name: Optional[str] = None
     product_id: Optional[int]
     product_name: str
     quantity: int

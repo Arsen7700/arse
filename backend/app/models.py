@@ -1,7 +1,27 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint, Boolean, Date
+from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, ForeignKey, UniqueConstraint, Boolean, Date
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
+
+
+class Store(Base):
+    __tablename__ = "stores"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(120), nullable=False, unique=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class StaffAccount(Base):
+    __tablename__ = "staff_accounts"
+
+    telegram_id = Column(BigInteger, primary_key=True)
+    display_name = Column(String(200), nullable=False)
+    role = Column(String(20), nullable=False, default="specialist")
+    store_id = Column(Integer, ForeignKey("stores.id"), nullable=True, index=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 class Category(Base):
     __tablename__ = "categories"
@@ -15,6 +35,7 @@ class Product(Base):
     __tablename__ = "products"
 
     id = Column(Integer, primary_key=True, index=True)
+    store_id = Column(Integer, ForeignKey("stores.id"), nullable=False, index=True)
     name = Column(String(200), nullable=False, index=True)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     purchase_price = Column(Float, nullable=False, default=0)
@@ -31,6 +52,8 @@ class Sale(Base):
     __tablename__ = "sales"
 
     id = Column(Integer, primary_key=True, index=True)
+    store_id = Column(Integer, ForeignKey("stores.id"), nullable=False, index=True)
+    created_by_telegram_id = Column(BigInteger, nullable=True, index=True)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=True)
     product_name = Column(String(200), nullable=False)
     quantity = Column(Integer, nullable=False)
