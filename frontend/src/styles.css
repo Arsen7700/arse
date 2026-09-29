@@ -543,3 +543,259 @@ th {
     flex: 1 1 180px;
   }
 }
+
+/* Telegram-inspired visual refresh: dark surfaces, clear blue actions, and a mobile dock. */
+:root {
+  color: #f4f6fa;
+  background: #090a0d;
+  color-scheme: dark;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+}
+
+body {
+  color: #f4f6fa;
+  background:
+    radial-gradient(ellipse at 74% -12%, rgba(39, 91, 221, .13), transparent 34rem),
+    #090a0d;
+}
+
+.app-shell {
+  grid-template-columns: 252px minmax(0, 1fr);
+  background: transparent;
+}
+
+.sidebar {
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  height: 100dvh;
+  padding: 26px 16px;
+  background: rgba(13, 14, 18, .94);
+  border-right: 1px solid #202229;
+  backdrop-filter: blur(18px);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 6px;
+}
+
+.brand-mark {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  border-radius: 15px;
+  background: linear-gradient(145deg, #3a8cff, #1761e9 70%);
+  box-shadow: 0 8px 24px rgba(33, 108, 244, .26);
+}
+
+.brand-mark svg {
+  width: 25px;
+  height: 25px;
+  stroke: white;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.brand-copy { display: grid; gap: 2px; }
+.brand-copy strong { font-size: 19px; letter-spacing: -.35px; }
+.brand-copy small { color: #838995; font-size: 12px; }
+
+.sidebar nav {
+  display: grid;
+  gap: 7px;
+}
+
+.sidebar a {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  color: #a2a7b1;
+  font-size: 15px;
+  font-weight: 600;
+  transition: background .18s ease, color .18s ease, transform .18s ease;
+}
+
+.sidebar a:hover { background: #191b21; color: #fff; }
+.sidebar a.active {
+  color: #fff;
+  background: linear-gradient(135deg, #2875f6, #1e59d8);
+  box-shadow: 0 7px 20px rgba(27, 91, 222, .22);
+}
+
+.nav-icon {
+  width: 21px;
+  height: 21px;
+  flex: 0 0 21px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.content {
+  width: min(100%, 1500px);
+  margin: 0 auto;
+  padding: 34px clamp(18px, 3vw, 44px);
+}
+
+.page-header { margin-bottom: 24px; }
+.page-header h1 { font-size: clamp(27px, 3vw, 34px); letter-spacing: -.8px; }
+.page-header .muted { margin: 7px 0 0; color: #9298a4; }
+.page-header .row { flex-wrap: wrap; }
+
+.card {
+  margin-bottom: 18px;
+  padding: 20px;
+  border: 1px solid #24262d;
+  border-radius: 20px;
+  background: linear-gradient(145deg, rgba(24, 26, 32, .98), rgba(17, 18, 22, .98));
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .2);
+}
+
+.section-title { color: #f6f7fa; font-size: 17px; letter-spacing: -.2px; }
+.muted { color: #9298a4; }
+.small { color: #858b96; }
+
+input, select, textarea {
+  color: #f2f4f7;
+  background: #111318;
+  border-color: #30333b;
+  border-radius: 13px;
+}
+
+input::placeholder, textarea::placeholder { color: #727782; }
+input:focus, select:focus, textarea:focus {
+  border-color: #4388ff;
+  outline: 3px solid rgba(48, 123, 255, .15);
+}
+
+button {
+  border-color: #353943;
+  border-radius: 13px;
+  background: #22252c;
+  transition: filter .16s ease, transform .16s ease, background .16s ease;
+}
+
+button:hover { filter: brightness(1.12); }
+button:active { transform: scale(.98); }
+button:disabled { cursor: wait; opacity: .62; }
+button.primary {
+  border-color: #2875f6;
+  background: linear-gradient(135deg, #3986ff, #2161e8);
+  box-shadow: 0 6px 18px rgba(36, 104, 230, .18);
+}
+button.danger { background: #64272d; border-color: #793139; }
+
+.table-wrap {
+  border: 1px solid #252830;
+  border-radius: 14px;
+}
+
+table { min-width: 620px; }
+th, td { border-bottom-color: #292c34; }
+th { color: #9ca2ad; font-weight: 650; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: rgba(255, 255, 255, .025); }
+
+.inventory-sale-line,
+.history-edit-form,
+.telegram-settings,
+.summary-box {
+  border-color: #2a2d35;
+  border-radius: 15px;
+  background: #121419;
+}
+
+.progress { background: #292d36; }
+.progress-fill { background: linear-gradient(90deg, #3788ff, #55b9ff); }
+.notice { background: #132b21; border-color: #285b43; border-radius: 13px; }
+
+.sales-history-modal {
+  border-color: #30333b;
+  border-radius: 22px;
+  background: #14161b;
+}
+
+.telegram-only-notice {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+}
+.telegram-only-notice .card { width: min(520px, 100%); }
+
+@media (max-width: 900px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .sidebar {
+    position: sticky;
+    top: 0;
+    height: auto;
+    gap: 14px;
+    padding: 15px 18px 12px;
+    border-right: 0;
+    border-bottom: 1px solid #202229;
+  }
+  .sidebar nav { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .sidebar a { justify-content: center; }
+  .content { padding: 24px 20px; }
+}
+
+@media (max-width: 650px) {
+  .sidebar {
+    position: fixed;
+    top: auto;
+    right: 14px;
+    bottom: calc(12px + var(--tg-content-safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+    left: 14px;
+    width: auto;
+    gap: 0;
+    padding: 7px;
+    border: 1px solid #303137;
+    border-radius: 26px;
+    background: rgba(20, 21, 25, .96);
+    box-shadow: 0 12px 44px rgba(0, 0, 0, .58);
+    backdrop-filter: blur(22px);
+  }
+
+  .brand { display: none; }
+  .sidebar nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .sidebar a {
+    min-width: 0;
+    min-height: 60px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    padding: 6px 3px;
+    border-radius: 19px;
+    font-size: 10px;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+  .sidebar a.active { color: #56a0ff; background: #24262d; box-shadow: none; }
+  .nav-icon { width: 22px; height: 22px; }
+
+  .content {
+    padding: 23px 14px calc(104px + var(--tg-content-safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  }
+  .page-header { gap: 12px; margin-bottom: 18px; }
+  .page-header h1 { font-size: 27px; }
+  .page-header .row { width: 100%; }
+  .page-header .row > * { flex: 1 1 120px; min-width: 0; }
+  .card { padding: 16px 14px; border-radius: 18px; }
+  .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .form-grid, .filters, .telegram-schedule-fields { grid-template-columns: 1fr; }
+  .inventory-sale-line { grid-template-columns: 1fr; }
+  .table-wrap { margin-inline: -3px; }
+  th, td { padding: 12px 10px; }
+  .modal-backdrop { z-index: 1000; }
+}
