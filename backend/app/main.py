@@ -15,7 +15,8 @@ from typing import Optional
 
 from .database import Base, engine, get_db, SessionLocal
 from . import models, schemas
-from .migrations import migrate_sales_schema, migrate_store_and_staff_schema
+from .migrations import migrate_plan_fact_catalog, migrate_sales_schema, migrate_store_and_staff_schema
+from .plan_fact import PLAN_FACT_ITEMS
 from .access import CurrentUser, apply_store_scope, assigned_store_id, current_user, require_roles
 from .telegram_reports import (
     build_daily_report,
@@ -29,6 +30,7 @@ from .telegram_auth import TelegramInitDataError, validate_telegram_init_data
 migrate_sales_schema(engine)
 Base.metadata.create_all(bind=engine)
 migrate_store_and_staff_schema(engine)
+migrate_plan_fact_catalog(engine)
 
 app = FastAPI(title="Inventory & Sales API", version="1.0.0")
 logger = logging.getLogger(__name__)
@@ -194,6 +196,32 @@ def ensure_default_store(db: Session) -> models.Store:
     return store
 
 
+def ensure_plan_fact_products(db: Session, store_id: int) -> None:
+    """Create the fixed plan-fact item tree for a newly created store."""
+    products_by_name = {
+        product.name: product
+        for product in db.query(models.Product).filter_by(
+            store_id=store_id, is_plan_fact=True
+        ).all()
+    }
+    for item in PLAN_FACT_ITEMS:
+        if item["name"] in products_by_name:
+            continue
+        product = models.Product(
+            store_id=store_id,
+            name=item["name"],
+            purchase_price=0,
+            sale_price=0,
+            quantity=0,
+            description="Показатель план-факта; складской остаток не ведётся.",
+            is_plan_fact=True,
+            parent_product_id=(products_by_name[item["parent"]].id if item["parent"] else None),
+        )
+        db.add(product)
+        db.flush()
+        products_by_name[item["name"]] = product
+
+
 def get_store(db: Session, store_id: int, *, active_only: bool = True) -> models.Store:
     store = db.get(models.Store, store_id)
     if not store or (active_only and not store.is_active):
@@ -258,6 +286,8 @@ def create_store(
     db.add(store)
     db.commit()
     db.refresh(store)
+    ensure_plan_fact_products(db, store.id)
+    db.commit()
     return store
 
 
@@ -649,6 +679,7 @@ def list_products(
     user: CurrentUser = Depends(current_user),
 ):
     q = apply_store_scope(db.query(models.Product), models.Product, user, store_id)
+    q = q.filter(models.Product.is_plan_fact.is_(True))
     if search:
         q = q.filter(models.Product.name.ilike(f"%{search}%"))
     if category_id:
@@ -660,57 +691,18 @@ def list_products(
 def list_saleable_products(
     year: Optional[int] = Query(None, ge=2000, le=2100),
     month: Optional[int] = Query(None, ge=1, le=12),
+    store_id: Optional[int] = None,
     db: Session = Depends(get_db),
     user: CurrentUser = Depends(current_user),
 ):
-    now = datetime.now(ZoneInfo(os.getenv("APP_TIMEZONE", "Asia/Almaty")))
-    target_year = now.year if year is None else year
-    target_month = now.month if month is None else month
-    q = db.query(models.Product).join(
-        models.StaffProductMonthlyGoal,
-        models.StaffProductMonthlyGoal.product_id == models.Product.id,
-    ).join(
-        models.StaffAccount,
-        models.StaffAccount.telegram_id == models.StaffProductMonthlyGoal.telegram_id,
-    ).filter(
-        models.StaffProductMonthlyGoal.year == target_year,
-        models.StaffProductMonthlyGoal.month == target_month,
-        models.StaffAccount.is_active.is_(True),
-    )
-    if user.role in {"specialist", "cashier"}:
-        q = q.filter(models.StaffProductMonthlyGoal.telegram_id == user.telegram_id)
-    q = apply_store_scope(q, models.Product, user)
-    return q.distinct().order_by(models.Product.name).all()
-
-
-@app.get("/saleable-products", response_model=list[schemas.ProductOut])
-def list_saleable_products(
-    year: Optional[int] = Query(None, ge=2000, le=2100),
-    month: Optional[int] = Query(None, ge=1, le=12),
-    db: Session = Depends(get_db),
-    user: CurrentUser = Depends(current_user),
-):
-    now = datetime.now(ZoneInfo(os.getenv("APP_TIMEZONE", "Asia/Almaty")))
-    target_year = now.year if year is None else year
-    target_month = now.month if month is None else month
-    q = db.query(models.Product).join(
-        models.StaffProductMonthlyGoal,
-        models.StaffProductMonthlyGoal.product_id == models.Product.id,
-    ).join(
-        models.StaffAccount,
-        models.StaffAccount.telegram_id == models.StaffProductMonthlyGoal.telegram_id,
-    ).filter(
-        models.StaffProductMonthlyGoal.year == target_year,
-        models.StaffProductMonthlyGoal.month == target_month,
-        models.StaffAccount.is_active.is_(True),
-    )
-    if user.role in {"specialist", "cashier"}:
-        q = q.filter(models.StaffProductMonthlyGoal.telegram_id == user.telegram_id)
-    q = apply_store_scope(q, models.Product, user)
-    return q.distinct().order_by(models.Product.name).all()
+    q = db.query(models.Product).filter(models.Product.is_plan_fact.is_(True))
+    q = apply_store_scope(q, models.Product, user, store_id)
+    return q.order_by(models.Product.parent_product_id, models.Product.id).all()
 
 
 def require_sale_plan(db: Session, product: models.Product, user: CurrentUser, sale_date: datetime):
+    if product.is_plan_fact:
+        return
     zone = ZoneInfo(os.getenv("APP_TIMEZONE", "Asia/Almaty"))
     local_sale_date = sale_date.astimezone(zone) if sale_date.tzinfo else sale_date
     plan_query = db.query(models.StaffProductMonthlyGoal.id).join(
@@ -769,6 +761,8 @@ def delete_product(
     user: CurrentUser = Depends(require_roles("specialist", "lead")),
 ):
     product = require_product_access(db, product_id, user)
+    if product.is_plan_fact:
+        raise HTTPException(status_code=400, detail="Показатель план-факта нельзя удалить")
 
     sale_count = db.query(models.Sale).filter(models.Sale.product_id == product_id).count()
     if sale_count > 0:
@@ -795,6 +789,8 @@ def change_stock(
     user: CurrentUser = Depends(require_roles("admin")),
 ):
     product = require_product_access(db, product_id, user)
+    if product.is_plan_fact:
+        raise HTTPException(status_code=400, detail="Для показателя план-факта складской остаток не ведётся")
 
     result = db.execute(
         update(models.Product)
@@ -858,17 +854,18 @@ def create_sale(
 
     # Conditional SQL update makes stock validation and decrement atomic, including
     # when multiple sales arrive concurrently.
-    result = db.execute(
-        update(models.Product)
-        .where(
-            models.Product.id == product.id,
-            models.Product.quantity >= payload.quantity,
+    if not product.is_plan_fact:
+        result = db.execute(
+            update(models.Product)
+            .where(
+                models.Product.id == product.id,
+                models.Product.quantity >= payload.quantity,
+            )
+            .values(quantity=models.Product.quantity - payload.quantity)
         )
-        .values(quantity=models.Product.quantity - payload.quantity)
-    )
-    if not result.rowcount:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="Недостаточно товара на складе")
+        if not result.rowcount:
+            db.rollback()
+            raise HTTPException(status_code=400, detail="Недостаточно товара на складе")
     db.add(sale)
     try:
         db.commit()
@@ -901,6 +898,8 @@ def create_bulk_inventory_sale(
         # Decrement each distinct product once. All lines are committed together;
         # a shortage on any item rolls back every stock change and sale row.
         for product_id, requested_quantity in requested_quantities.items():
+            if products[product_id].is_plan_fact:
+                continue
             result = db.execute(
                 update(models.Product)
                 .where(
@@ -973,7 +972,8 @@ def update_sale(
     data = payload.model_dump(exclude_unset=True)
     if "quantity" in data:
         quantity_delta = data["quantity"] - sale.quantity
-        if quantity_delta and sale.product_id is not None:
+        product = db.get(models.Product, sale.product_id) if sale.product_id is not None else None
+        if quantity_delta and product is not None and not product.is_plan_fact:
             if quantity_delta > 0:
                 result = db.execute(
                     update(models.Product)
@@ -1031,7 +1031,8 @@ def delete_sale(
 ):
     sale = require_sale_access(db, sale_id, user)
 
-    if sale.product_id is not None:
+    product = db.get(models.Product, sale.product_id) if sale.product_id is not None else None
+    if product is not None and not product.is_plan_fact:
         result = db.execute(
             update(models.Product)
             .where(models.Product.id == sale.product_id)
@@ -1406,21 +1407,9 @@ def dashboard(
     ).order_by(models.Product.name).all()
     stock_qty = sum(product.quantity for product in products)
 
-    planned_products_query = db.query(models.Product).join(
-        models.StaffProductMonthlyGoal,
-        models.StaffProductMonthlyGoal.product_id == models.Product.id,
-    ).join(
-        models.StaffAccount,
-        models.StaffAccount.telegram_id == models.StaffProductMonthlyGoal.telegram_id,
-    ).filter(
-        models.StaffProductMonthlyGoal.year == year,
-        models.StaffProductMonthlyGoal.month == month,
-        models.StaffAccount.is_active.is_(True),
+    planned_products_query = db.query(models.Product).filter(
+        models.Product.is_plan_fact.is_(True)
     )
-    if user.role in {"specialist", "cashier"}:
-        planned_products_query = planned_products_query.filter(
-            models.StaffProductMonthlyGoal.telegram_id == user.telegram_id
-        )
     planned_products = apply_store_scope(
         planned_products_query, models.Product, user, store_id
     ).distinct().order_by(models.Product.name).all()
@@ -1436,19 +1425,18 @@ def dashboard(
 
     product_stats = {}
     for product in planned_products:
-        product_stats[("catalog", product.id)] = {
+        key = ("plan_fact", product.name.casefold())
+        product_stats.setdefault(key, {
             "product_id": product.id,
             "product_name": product.name,
             "sold_quantity": 0,
             "revenue": 0.0,
             "profit": 0.0,
-            "stock_quantity": product.quantity,
-        }
+            "stock_quantity": None,
+        })
 
     for sale in sales:
-        if sale.product_id is None:
-            continue
-        key = ("catalog", sale.product_id)
+        key = ("plan_fact", sale.product_name.casefold())
         if key not in product_stats:
             continue
         stats = product_stats[key]

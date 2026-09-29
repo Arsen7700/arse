@@ -152,12 +152,17 @@ h1 {
 
 .inventory-sale-line {
   display: grid;
-  grid-template-columns: minmax(220px, 2fr) minmax(110px, .7fr) minmax(190px, 1.2fr) auto;
+  grid-template-columns: minmax(180px, 1.1fr) minmax(190px, 1.3fr) minmax(130px, .7fr) minmax(220px, 1.5fr) auto;
   gap: 10px;
   align-items: end;
   padding: 12px;
   border: 1px solid #2a3850;
   border-radius: 10px;
+}
+
+.plan-fact-child {
+  padding-left: 28px;
+  color: #aab7cb;
 }
 
 .inventory-sale-line label {

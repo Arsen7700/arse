@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { PLAN_FACT_GROUPS } from "../planFact";
 
 const REPORT_ROWS = [
   { label: "SA", plan: 30, metric: "quantity", aliases: ["sa", "sim-карта", "sim карта", "сим-карта", "сим карта", "сим-карты"] },
@@ -68,8 +69,8 @@ export default function Sales() {
   const canSendReport = canSendFullReport || isOwnSalesRole;
   const canEditDailySettings = ["specialist", "cashier", "lead", "admin"].includes(user?.role);
   const canSelectReportStore = ["lead", "admin"].includes(user?.role);
+  const canSelectSaleStore = ["lead", "admin"].includes(user?.role);
   const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
   const [stores, setStores] = useState([]);
   const [sales, setSales] = useState([]);
   const [inventoryItems, setInventoryItems] = useState([
@@ -92,6 +93,7 @@ export default function Sales() {
   const [reportSending, setReportSending] = useState(false);
   const [telegramAdminKey, setTelegramAdminKey] = useState("");
   const [reportStoreId, setReportStoreId] = useState("");
+  const [saleStoreId, setSaleStoreId] = useState("");
   const [dailySettings, setDailySettings] = useState({ cash_limit: "60к", cash_remaining: "80к", collection_status: "нет" });
   const [telegramSchedule, setTelegramSchedule] = useState({
     enabled: false,
@@ -102,7 +104,7 @@ export default function Sales() {
 
   const loadProducts = async () => {
     const [year, month] = saleMonth.split("-").map(Number);
-    const p = await api.get("/saleable-products", { params: { year, month } });
+    const p = await api.get("/saleable-products", { params: { year, month, ...(saleStoreId ? { store_id: Number(saleStoreId) } : {}) } });
     setProducts(p.data);
   };
 
@@ -126,40 +128,25 @@ export default function Sales() {
 
   useEffect(() => {
     loadProducts();
-    api.get("/categories").then((response) => setCategories(response.data)).catch(() => {});
-  }, [saleMonth]);
+  }, [saleMonth, saleStoreId]);
 
-  const plannedProductsByCategory = new Map();
-  products.forEach((product) => {
-    const key = product.category_id == null ? "uncategorized" : String(product.category_id);
-    plannedProductsByCategory.set(key, (plannedProductsByCategory.get(key) || 0) + 1);
+  const productForName = (name) => products.find((product) => product.name === name);
+  const saleCategories = PLAN_FACT_GROUPS.flatMap((group) => {
+    const parent = productForName(group.name);
+    return parent ? [{ value: String(parent.id), label: group.name }] : [];
   });
-  const saleCategories = [
-    ...categories
-      .map((category) => ({
-        value: String(category.id),
-        label: plannedProductsByCategory.has(String(category.id))
-          ? `${category.name} · ${plannedProductsByCategory.get(String(category.id))} товаров с план-фактом`
-          : `${category.name} · план-факт не назначен`,
-      }))
-      .sort((a, b) => a.value.localeCompare(b.value, "ru", { numeric: true })),
-    ...(plannedProductsByCategory.has("uncategorized")
-      ? [{
-        value: "uncategorized",
-        label: `Без категории · ${plannedProductsByCategory.get("uncategorized")} с план-фактом`,
-      }]
-      : []),
-  ];
-
-  const productsForCategory = (categoryId) => products.filter((product) =>
-    (product.category_id == null ? "uncategorized" : String(product.category_id)) === String(categoryId)
-  );
+  const productsForCategory = (categoryId) => {
+    const parent = products.find((product) => product.id === Number(categoryId));
+    if (!parent) return [];
+    return products.filter((product) => product.id === parent.id || product.parent_product_id === parent.id);
+  };
 
   useEffect(() => {
     if (canSelectReportStore) {
       api.get("/stores").then((response) => {
         setStores(response.data);
         setReportStoreId((current) => current || String(response.data[0]?.id || ""));
+        setSaleStoreId((current) => current || String(response.data[0]?.id || ""));
       }).catch(() => {});
     }
   }, [canSelectReportStore]);
@@ -441,7 +428,7 @@ export default function Sales() {
       <div className="page-header">
         <div>
           <h1>Продажи</h1>
-          <p className="muted">{isLead ? "Регистрация и редактирование продаж по лавочкам" : "Регистрация ваших продаж"}</p>
+          <p className="muted">{isLead ? "Регистрация факта по показателям план-факта в лавочках" : "Регистрация факта по показателям план-факта"}</p>
         </div>
         <div className="row sales-page-actions">
           <button type="button" onClick={() => setHistoryOpen(true)}>
@@ -455,12 +442,21 @@ export default function Sales() {
 
       {!readOnly && <div className="card">
         <form className="form-grid" onSubmit={submit}>
+          {canSelectSaleStore && <label>
+            Лавочка продаж
+            <select value={saleStoreId} onChange={(event) => {
+              setSaleStoreId(event.target.value);
+              setInventoryItems([{ category_id: "", product_id: "", quantity: 1, total_amount: "" }]);
+            }} required>
+              {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
+            </select>
+          </label>}
           <div className="inventory-sale-lines">
-            {!products.length && <div className="notice">На выбранный месяц товары с план-фактом не назначены. Попросите ведущего или администратора назначить план-факт.</div>}
+            {!products.length && <div className="notice">Показатели план-факта не найдены. Перезапустите сервер API, чтобы загрузить обновлённый каталог.</div>}
               {inventoryItems.map((line, index) => (
                 <div className="inventory-sale-line" key={index}>
                   <label>
-                    Категория с план-фактом
+                    Категория план-факта
                     <select
                       value={line.category_id}
                       onChange={(event) => setInventoryItems(inventoryItems.map((item, itemIndex) =>
@@ -468,12 +464,12 @@ export default function Sales() {
                       ))}
                       required
                     >
-                      <option value="">Выберите категорию с план-фактом</option>
+                      <option value="">Выберите категорию</option>
                       {saleCategories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
                     </select>
                   </label>
                   <label>
-                    Товар {index + 1}
+                    Показатель {index + 1}
                     <select
                       value={line.product_id}
                       disabled={!line.category_id}
@@ -486,18 +482,20 @@ export default function Sales() {
                         {!line.category_id
                           ? "Сначала выберите категорию"
                           : productsForCategory(line.category_id).length
-                            ? "Выберите товар с план-фактом"
-                            : "В этой категории нет товаров с план-фактом"}
+                          ? "Выберите показатель"
+                          : "Показателей в этой категории нет"}
                       </option>
                       {productsForCategory(line.category_id).map((product) => (
                         <option key={product.id} value={product.id}>
-                          {product.name} — остаток: {product.quantity}
+                          {product.name === products.find((item) => item.id === Number(line.category_id))?.name
+                            ? product.name
+                            : `${products.find((item) => item.id === Number(line.category_id))?.name} → ${product.name}`}
                         </option>
                       ))}
                     </select>
                   </label>
                   <label>
-                    Количество
+                    Факт, количество
                     <input
                       type="number"
                       min="1"
@@ -509,12 +507,14 @@ export default function Sales() {
                     />
                   </label>
                   <label>
-                    Сумма строки (необязательно)
+                    Факт, сумма (обязательно для услуг и аксессуаров)
                     <input
                       type="number"
                       min="0"
                       step="0.01"
-                      placeholder="По цене товара"
+                      placeholder="Введите сумму, если показатель учитывается в сомах"
+                      required={products.find((product) => product.id === Number(line.product_id))?.name === "Услуги"
+                        || products.find((product) => product.id === Number(line.product_id))?.name === "Аксессуары"}
                       value={line.total_amount}
                       onChange={(event) => setInventoryItems(inventoryItems.map((item, itemIndex) =>
                         itemIndex === index ? { ...item, total_amount: event.target.value } : item
@@ -539,7 +539,7 @@ export default function Sales() {
                   { category_id: "", product_id: "", quantity: 1, total_amount: "" },
                 ])}
               >
-                + Добавить товар
+                + Добавить показатель
               </button>
           </div>
 

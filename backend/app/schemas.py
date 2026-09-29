@@ -106,6 +106,8 @@ class ProductOut(BaseModel):
     quantity: int
     description: Optional[str]
     image_url: Optional[str]
+    is_plan_fact: bool = False
+    parent_product_id: Optional[int] = None
     created_at: datetime
     model_config = {"from_attributes": True}
 

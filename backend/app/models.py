@@ -55,10 +55,13 @@ class Product(Base):
     quantity = Column(Integer, nullable=False, default=0)
     description = Column(String(1000), nullable=True)
     image_url = Column(String(500), nullable=True)
+    is_plan_fact = Column(Boolean, nullable=False, default=False, index=True)
+    parent_product_id = Column(Integer, ForeignKey("products.id"), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     category = relationship("Category", back_populates="products")
     sales = relationship("Sale", back_populates="product")
+    parent_product = relationship("Product", remote_side=[id], backref="child_products")
 
 class Sale(Base):
     __tablename__ = "sales"

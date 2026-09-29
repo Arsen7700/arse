@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api";
+import { PLAN_FACT_ITEMS } from "../planFact";
 
 const money = (value) => `${Number(value || 0).toLocaleString("ru-RU")} сом`;
 const localDateValue = (date) => {
@@ -63,7 +64,8 @@ export default function Dashboard() {
         transactions: 0,
       });
     });
-  daySales.forEach((sale) => {
+  const planFactNames = new Set(PLAN_FACT_ITEMS.map((item) => item.name));
+  daySales.filter((sale) => planFactNames.has(sale.product_name)).forEach((sale) => {
     const key = sale.product_id !== null
       ? `catalog-${sale.product_id}`
       : `manual-${sale.product_name}`;
@@ -91,7 +93,7 @@ export default function Dashboard() {
       <div className="page-header">
         <div>
           <h1>Dashboard</h1>
-          <p className="muted">Статистика продаж по каждому товару</p>
+          <p className="muted">Фактические продажи по показателям план-факта</p>
         </div>
 
         <div className="row">
@@ -117,10 +119,8 @@ export default function Dashboard() {
             <thead>
               <tr>
                 <th>Товар</th>
-                <th>Продано</th>
-                <th>Выручка</th>
-                <th>Прибыль</th>
-                <th>Остаток</th>
+                <th>Факт, количество</th>
+                <th>Факт, сумма</th>
               </tr>
             </thead>
             <tbody>
@@ -130,13 +130,11 @@ export default function Dashboard() {
                     <td>{item.product_name}</td>
                     <td>{item.sold_quantity}</td>
                     <td>{money(item.revenue)}</td>
-                    <td>{money(item.profit)}</td>
-                    <td>{item.stock_quantity ?? "—"}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="5">На выбранный месяц товары в план-факт не назначены</td>
+                  <td colSpan="3">На выбранный месяц показатели план-факта не найдены</td>
                 </tr>
               )}
             </tbody>
@@ -165,27 +163,25 @@ export default function Dashboard() {
             <thead>
               <tr>
                 <th>Товар</th>
-                <th>Продано</th>
-                <th>Выручка</th>
-                <th>Прибыль</th>
+                <th>Факт, количество</th>
+                <th>Факт, сумма</th>
                 <th>Количество продаж</th>
               </tr>
             </thead>
             <tbody>
               {dayLoading ? (
-                <tr><td colSpan="5">Загрузка статистики...</td></tr>
+                <tr><td colSpan="4">Загрузка статистики...</td></tr>
               ) : dailyProducts.length ? (
                 dailyProducts.map((item, index) => (
                   <tr key={`${item.product_name}-${index}`}>
                     <td>{item.product_name}</td>
                     <td>{item.sold_quantity}</td>
                     <td>{money(item.revenue)}</td>
-                    <td>{money(item.profit)}</td>
                     <td>{item.transactions}</td>
                   </tr>
                 ))
               ) : (
-                <tr><td colSpan="5">Товары пока не добавлены</td></tr>
+                <tr><td colSpan="4">Показатели пока не найдены</td></tr>
               )}
             </tbody>
           </table>
