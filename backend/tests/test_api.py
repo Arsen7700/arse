@@ -690,6 +690,69 @@ def test_product_goals_are_saved_separately_by_product_and_month(client):
     assert next(row for row in next_month if row["product_id"] == first_product["id"])["revenue_goal"] == 0
 
 
+def test_lead_assigns_personal_product_plan_and_staff_only_sees_own(client):
+    store = client.post("/admin/stores", json={"name": "Целевая лавочка"}).json()
+    product_response = client.post(
+        "/products",
+        json={"name": "Плановый товар", "sale_price": 100, "quantity": 10, "store_id": store["id"]},
+    )
+    assert product_response.status_code == 200, product_response.text
+    product = product_response.json()
+    for telegram_id in (51001, 51002):
+        created = client.post(
+            "/team/staff",
+            json={
+                "telegram_id": telegram_id,
+                "display_name": f"Сотрудник {telegram_id}",
+                "role": "specialist",
+                "store_id": store["id"],
+            },
+        )
+        assert created.status_code == 200, created.text
+
+    assigned = client.put(
+        "/team/staff-goals",
+        json={
+            "telegram_id": 51001,
+            "product_id": product["id"],
+            "year": 2026,
+            "month": 9,
+            "revenue_goal": 5000,
+            "quantity_goal": 20,
+        },
+    )
+    assert assigned.status_code == 200, assigned.text
+    assert assigned.json()["product_name"] == "Плановый товар"
+
+    app.dependency_overrides[current_user] = lambda: CurrentUser(51001, "Сотрудник", "specialist", store["id"])
+    try:
+        own = client.get("/my-goals/2026/9")
+        assert own.status_code == 200, own.text
+        assert own.json() == [assigned.json()]
+        assert client.get("/team/staff-goals/51002/2026/9").status_code == 403
+        assert client.put(
+            "/team/staff-goals",
+            json={
+                "telegram_id": 51002,
+                "product_id": product["id"],
+                "year": 2026,
+                "month": 9,
+                "revenue_goal": 1,
+                "quantity_goal": 1,
+            },
+        ).status_code == 403
+    finally:
+        app.dependency_overrides.pop(current_user, None)
+
+    app.dependency_overrides[current_user] = lambda: CurrentUser(51002, "Другой", "cashier", store["id"])
+    try:
+        other = client.get("/my-goals/2026/9")
+        assert other.status_code == 200, other.text
+        assert other.json() == []
+    finally:
+        app.dependency_overrides.pop(current_user, None)
+
+
 def test_telegram_schedule_requires_admin_key(client, monkeypatch):
     monkeypatch.setenv("TELEGRAM_ADMIN_KEY", "test-admin-secret")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")

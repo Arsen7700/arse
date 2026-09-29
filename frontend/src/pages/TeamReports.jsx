@@ -16,6 +16,14 @@ export default function TeamReports() {
   const [teamAccounts, setTeamAccounts] = useState([]);
   const [newAccount, setNewAccount] = useState({ telegram_id: "", display_name: "", role: "specialist", store_id: "" });
   const [managementMessage, setManagementMessage] = useState("");
+  const [goalStaffId, setGoalStaffId] = useState("");
+  const [goalMonth, setGoalMonth] = useState(() => `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`);
+  const [goalProducts, setGoalProducts] = useState([]);
+  const [staffGoals, setStaffGoals] = useState([]);
+  const [goalProductId, setGoalProductId] = useState("");
+  const [goalRevenue, setGoalRevenue] = useState("0");
+  const [goalQuantity, setGoalQuantity] = useState("0");
+  const [goalSaving, setGoalSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -24,9 +32,63 @@ export default function TeamReports() {
       .then(([storesResponse, staffResponse]) => {
         setStores(storesResponse.data);
         setTeamAccounts(staffResponse.data);
+        setGoalStaffId(String(staffResponse.data[0]?.telegram_id || ""));
       })
       .catch((requestError) => setError(requestError.response?.data?.detail || "Не удалось загрузить сотрудников и лавочки"));
   }, []);
+
+  useEffect(() => {
+    const person = teamAccounts.find((item) => String(item.telegram_id) === goalStaffId);
+    if (!person || !goalMonth) {
+      setGoalProducts([]);
+      setStaffGoals([]);
+      return;
+    }
+    const [year, month] = goalMonth.split("-").map(Number);
+    Promise.all([
+      api.get(`/products`, { params: { store_id: person.store_id } }),
+      api.get(`/team/staff-goals/${person.telegram_id}/${year}/${month}`),
+    ]).then(([productsResponse, goalsResponse]) => {
+      setGoalProducts(productsResponse.data);
+      setStaffGoals(goalsResponse.data);
+      setGoalProductId((current) => current || String(productsResponse.data[0]?.id || ""));
+    }).catch((requestError) => {
+      setManagementMessage(requestError.response?.data?.detail || "Не удалось загрузить план сотрудника");
+      setGoalProducts([]);
+      setStaffGoals([]);
+    });
+  }, [teamAccounts, goalStaffId, goalMonth]);
+
+  useEffect(() => {
+    const existing = staffGoals.find((goal) => goal.product_id === Number(goalProductId));
+    setGoalRevenue(String(existing?.revenue_goal ?? 0));
+    setGoalQuantity(String(existing?.quantity_goal ?? 0));
+  }, [staffGoals, goalProductId]);
+
+  const saveStaffGoal = async (event) => {
+    event.preventDefault();
+    const person = teamAccounts.find((item) => String(item.telegram_id) === goalStaffId);
+    if (!person || !goalProductId) return;
+    const [year, month] = goalMonth.split("-").map(Number);
+    setGoalSaving(true);
+    setManagementMessage("");
+    try {
+      const response = await api.put("/team/staff-goals", {
+        telegram_id: person.telegram_id,
+        product_id: Number(goalProductId),
+        year,
+        month,
+        revenue_goal: Number(goalRevenue),
+        quantity_goal: Number(goalQuantity),
+      });
+      setStaffGoals((current) => [...current.filter((item) => item.product_id !== response.data.product_id), response.data]);
+      setManagementMessage(`План-факт для ${person.display_name} сохранён.`);
+    } catch (requestError) {
+      setManagementMessage(requestError.response?.data?.detail || "Не удалось сохранить план-факт");
+    } finally {
+      setGoalSaving(false);
+    }
+  };
 
   const updateTeamAccount = (telegramId, field, value) => {
     setTeamAccounts((current) => current.map((person) => person.telegram_id === telegramId
@@ -150,6 +212,36 @@ export default function TeamReports() {
             </tbody>
           </table>
         </div>
+      </section>
+      <section className="card">
+        <div className="section-title">План-факт сотрудника</div>
+        <p className="muted">Назначьте месячные цели по товарам. Специалист или кассир увидит их в окне «Мои цели» вместе со своими продажами.</p>
+        {teamAccounts.length ? <>
+          <div className="row goal-period">
+            <label>Сотрудник<select value={goalStaffId} onChange={(event) => { setGoalStaffId(event.target.value); setGoalProductId(""); }}>
+              {teamAccounts.map((person) => <option key={person.telegram_id} value={person.telegram_id}>{person.display_name} · {roleNames[person.role]}</option>)}
+            </select></label>
+            <label>Месяц<input type="month" value={goalMonth} onChange={(event) => { setGoalMonth(event.target.value); setGoalProductId(""); }} /></label>
+          </div>
+          <form className="form-grid admin-account-form" onSubmit={saveStaffGoal}>
+            <select value={goalProductId} onChange={(event) => setGoalProductId(event.target.value)} required>
+              <option value="">Выберите товар</option>
+              {goalProducts.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+            </select>
+            <input aria-label="План по выручке" type="number" min="0" step="0.01" placeholder="План выручки, сом" value={goalRevenue} onChange={(event) => setGoalRevenue(event.target.value)} required />
+            <input aria-label="План по количеству" type="number" min="0" step="1" placeholder="План по количеству" value={goalQuantity} onChange={(event) => setGoalQuantity(event.target.value)} required />
+            <button className="primary" type="submit" disabled={goalSaving || !goalProductId}>{goalSaving ? "Сохраняю…" : "Сохранить план"}</button>
+          </form>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Товар</th><th>План по количеству</th><th>План по выручке</th><th>Изменить</th></tr></thead>
+              <tbody>{staffGoals.length ? staffGoals.map((goal) => <tr key={goal.product_id}>
+                <td>{goal.product_name}</td><td>{goal.quantity_goal} шт.</td><td>{money(goal.revenue_goal)}</td>
+                <td><button type="button" onClick={() => setGoalProductId(String(goal.product_id))}>Открыть</button></td>
+              </tr>) : <tr><td colSpan="4">Цели за выбранный месяц ещё не назначены.</td></tr>}</tbody>
+            </table>
+          </div>
+        </> : <p className="muted">Сначала добавьте специалиста или кассира.</p>}
       </section>
     </>
   );

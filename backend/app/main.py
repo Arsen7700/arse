@@ -696,6 +696,9 @@ def delete_product(
     db.query(models.ProductMonthlyGoal).filter(
         models.ProductMonthlyGoal.product_id == product_id
     ).delete(synchronize_session=False)
+    db.query(models.StaffProductMonthlyGoal).filter(
+        models.StaffProductMonthlyGoal.product_id == product_id
+    ).delete(synchronize_session=False)
     db.delete(product)
     db.commit()
     return {"ok": True}
@@ -1214,6 +1217,92 @@ def upsert_product_goal(
         "revenue_goal": goal.revenue_goal,
         "quantity_goal": goal.quantity_goal,
     }
+
+
+def staff_product_goal_data(goal, product):
+    return {
+        "telegram_id": goal.telegram_id,
+        "product_id": product.id,
+        "product_name": product.name,
+        "year": goal.year,
+        "month": goal.month,
+        "revenue_goal": goal.revenue_goal,
+        "quantity_goal": goal.quantity_goal,
+    }
+
+
+@app.get("/my-goals/{year}/{month}", response_model=list[schemas.StaffProductGoalOut])
+def list_my_staff_goals(
+    year: int,
+    month: int,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_roles("specialist", "cashier")),
+):
+    if not 2000 <= year <= 2100 or not 1 <= month <= 12:
+        raise HTTPException(status_code=422, detail="Некорректный год или месяц")
+    rows = db.query(models.StaffProductMonthlyGoal, models.Product).join(
+        models.Product, models.Product.id == models.StaffProductMonthlyGoal.product_id
+    ).filter(
+        models.StaffProductMonthlyGoal.telegram_id == user.telegram_id,
+        models.StaffProductMonthlyGoal.year == year,
+        models.StaffProductMonthlyGoal.month == month,
+    ).order_by(models.Product.name).all()
+    return [staff_product_goal_data(goal, product) for goal, product in rows]
+
+
+@app.get(
+    "/team/staff-goals/{telegram_id}/{year}/{month}",
+    response_model=list[schemas.StaffProductGoalOut],
+)
+def list_staff_goals(
+    telegram_id: int,
+    year: int,
+    month: int,
+    db: Session = Depends(get_db),
+    _user: CurrentUser = Depends(require_roles("lead")),
+):
+    if not 2000 <= year <= 2100 or not 1 <= month <= 12:
+        raise HTTPException(status_code=422, detail="Некорректный год или месяц")
+    account = db.get(models.StaffAccount, telegram_id)
+    if not account or account.role not in {"specialist", "cashier"}:
+        raise HTTPException(status_code=404, detail="Специалист или кассир не найден")
+    rows = db.query(models.StaffProductMonthlyGoal, models.Product).join(
+        models.Product, models.Product.id == models.StaffProductMonthlyGoal.product_id
+    ).filter(
+        models.StaffProductMonthlyGoal.telegram_id == telegram_id,
+        models.StaffProductMonthlyGoal.year == year,
+        models.StaffProductMonthlyGoal.month == month,
+    ).order_by(models.Product.name).all()
+    return [staff_product_goal_data(goal, product) for goal, product in rows]
+
+
+@app.put("/team/staff-goals", response_model=schemas.StaffProductGoalOut)
+def upsert_staff_goal(
+    payload: schemas.StaffProductGoalCreate,
+    db: Session = Depends(get_db),
+    _user: CurrentUser = Depends(require_roles("lead")),
+):
+    account = db.get(models.StaffAccount, payload.telegram_id)
+    if not account or account.role not in {"specialist", "cashier"} or not account.is_active:
+        raise HTTPException(status_code=404, detail="Активный специалист или кассир не найден")
+    product = db.get(models.Product, payload.product_id)
+    if not product or product.store_id != account.store_id:
+        raise HTTPException(status_code=404, detail="Товар не найден в лавочке сотрудника")
+    goal = db.query(models.StaffProductMonthlyGoal).filter_by(
+        telegram_id=payload.telegram_id,
+        product_id=payload.product_id,
+        year=payload.year,
+        month=payload.month,
+    ).first()
+    if goal is None:
+        goal = models.StaffProductMonthlyGoal(**payload.model_dump())
+        db.add(goal)
+    else:
+        goal.revenue_goal = payload.revenue_goal
+        goal.quantity_goal = payload.quantity_goal
+    db.commit()
+    db.refresh(goal)
+    return staff_product_goal_data(goal, product)
 
 @app.get("/dashboard")
 def dashboard(

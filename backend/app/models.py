@@ -106,6 +106,24 @@ class ProductMonthlyGoal(Base):
     quantity_goal = Column(Integer, nullable=False, default=0)
 
 
+class StaffProductMonthlyGoal(Base):
+    __tablename__ = "staff_product_monthly_goals"
+    __table_args__ = (
+        UniqueConstraint(
+            "telegram_id", "product_id", "year", "month",
+            name="uq_staff_product_goal_month",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    telegram_id = Column(BigInteger, ForeignKey("staff_accounts.telegram_id"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
+    year = Column(Integer, nullable=False)
+    month = Column(Integer, nullable=False)
+    revenue_goal = Column(Float, nullable=False, default=0)
+    quantity_goal = Column(Integer, nullable=False, default=0)
+
+
 class TelegramSchedule(Base):
     __tablename__ = "telegram_schedule"
 

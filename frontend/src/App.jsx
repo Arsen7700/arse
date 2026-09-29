@@ -25,9 +25,9 @@ function Layout({ children, user }) {
     { to: "/", label: "Обзор", icon: "overview" },
     ...(!isCashier ? [{ to: "/products", label: "Товары", icon: "products" }] : []),
     { to: "/sales", label: "Продажи", icon: "sales" },
-    ...(user.role === "lead"
+    ...(user.role === "lead" || user.role === "admin"
       ? [{ to: "/team-reports", label: "Команда", icon: "team" }]
-      : user.role === "specialist" || user.role === "admin"
+      : user.role === "specialist" || user.role === "cashier"
         ? [{ to: "/goals", label: "Мои цели", icon: "goals" }]
         : []),
     ...(user.role === "admin" ? [{ to: "/admin", label: "Админ", icon: "admin" }] : []),
@@ -92,7 +92,7 @@ function AuthenticatedApp() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/products" element={user.role === "cashier" ? <Dashboard /> : <Products />} />
             <Route path="/sales" element={<Sales />} />
-            <Route path="/goals" element={user.role === "cashier" || user.role === "lead" ? <Dashboard /> : <Goals />} />
+            <Route path="/goals" element={user.role === "cashier" || user.role === "specialist" ? <Goals /> : <Dashboard />} />
             <Route path="/team-reports" element={user.role === "admin" || user.role === "lead" ? <TeamReports /> : <Dashboard />} />
             <Route path="/admin" element={user.role === "admin" ? <AdminPanel /> : <Dashboard />} />
             <Route path="*" element={<Dashboard />} />
