@@ -16,7 +16,7 @@ from typing import Optional
 from .database import Base, engine, get_db, SessionLocal
 from . import models, schemas
 from .migrations import migrate_plan_fact_catalog, migrate_sales_schema, migrate_store_and_staff_schema
-from .plan_fact import PLAN_FACT_ITEMS
+from .plan_fact import PLAN_FACT_ITEMS, PLAN_FACT_NAMES
 from .access import CurrentUser, apply_store_scope, assigned_store_id, current_user, require_roles
 from .telegram_reports import (
     build_daily_report,
@@ -680,6 +680,7 @@ def list_products(
 ):
     q = apply_store_scope(db.query(models.Product), models.Product, user, store_id)
     q = q.filter(models.Product.is_plan_fact.is_(True))
+    q = q.filter(models.Product.name.in_(PLAN_FACT_NAMES))
     if search:
         q = q.filter(models.Product.name.ilike(f"%{search}%"))
     if category_id:
@@ -696,6 +697,7 @@ def list_saleable_products(
     user: CurrentUser = Depends(current_user),
 ):
     q = db.query(models.Product).filter(models.Product.is_plan_fact.is_(True))
+    q = q.filter(models.Product.name.in_(PLAN_FACT_NAMES))
     q = apply_store_scope(q, models.Product, user, store_id)
     return q.order_by(models.Product.parent_product_id, models.Product.id).all()
 
@@ -1408,7 +1410,8 @@ def dashboard(
     stock_qty = sum(product.quantity for product in products)
 
     planned_products_query = db.query(models.Product).filter(
-        models.Product.is_plan_fact.is_(True)
+        models.Product.is_plan_fact.is_(True),
+        models.Product.name.in_(PLAN_FACT_NAMES),
     )
     planned_products = apply_store_scope(
         planned_products_query, models.Product, user, store_id
@@ -1436,11 +1439,14 @@ def dashboard(
         })
 
     for sale in sales:
-        key = ("plan_fact", sale.product_name.casefold())
+        sale_name = sale.product_name.strip().casefold()
+        legacy_service = sale_name in {"услуги", "услуга"}
+        key = ("plan_fact", "sa" if legacy_service else sale_name)
         if key not in product_stats:
             continue
         stats = product_stats[key]
-        stats["sold_quantity"] += sale.quantity
+        if not legacy_service:
+            stats["sold_quantity"] += sale.quantity
         stats["revenue"] += sale.total_amount
         stats["profit"] += sale.profit
 

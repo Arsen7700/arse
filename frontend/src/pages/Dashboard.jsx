@@ -65,18 +65,24 @@ export default function Dashboard() {
       });
     });
   const planFactNames = new Set(PLAN_FACT_ITEMS.map((item) => item.name));
-  daySales.filter((sale) => planFactNames.has(sale.product_name)).forEach((sale) => {
-    const key = sale.product_id !== null
-      ? `catalog-${sale.product_id}`
-      : `manual-${sale.product_name}`;
+  daySales.filter((sale) => planFactNames.has(sale.product_name)
+    || ["услуги", "услуга"].includes((sale.product_name || "").trim().toLocaleLowerCase("ru-RU")))
+    .forEach((sale) => {
+    const legacyService = ["услуги", "услуга"].includes((sale.product_name || "").trim().toLocaleLowerCase("ru-RU"));
+    const saProductId = data.per_product?.find((product) => product.product_name === "SA")?.product_id;
+    const productId = legacyService ? saProductId : sale.product_id;
+    const productName = legacyService ? "SA" : sale.product_name;
+    const key = productId !== null && productId !== undefined
+      ? `catalog-${productId}`
+      : `manual-${productName}`;
     const item = dailyStats.get(key) || {
-      product_name: sale.product_name || `Товар ${sale.product_id ?? "без каталога"}`,
+      product_name: productName || `Товар ${productId ?? "без каталога"}`,
       sold_quantity: 0,
       revenue: 0,
       profit: 0,
       transactions: 0,
     };
-    item.sold_quantity += sale.quantity;
+    if (!legacyService) item.sold_quantity += sale.quantity;
     item.revenue += sale.total_amount;
     item.profit += sale.profit;
     item.transactions += 1;

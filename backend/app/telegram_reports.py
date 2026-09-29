@@ -16,10 +16,9 @@ REPORT_ROWS = (
     (
         "SA",
         30,
-        "quantity",
-        ("sa", "sim-карта", "sim карта", "сим-карта", "сим карта", "сим-карты"),
+        "sa",
+        ("sa", "sim-карта", "sim карта", "сим-карта", "сим карта", "сим-карты", "услуги", "услуга"),
     ),
-    ("Услуги", 15000, "revenue", ("услуги", "услуга")),
     ("Мой", 25, "quantity", ("мой", "мой!")),
     (
         "Карты",
@@ -112,11 +111,14 @@ def build_personal_sales_report(
     )
     grouped: dict[str, dict[str, Decimal | int]] = {}
     for sale in sales:
+        legacy_service = (sale.product_name or "").strip().casefold() in {"услуги", "услуга"}
+        product_name = "SA" if legacy_service else sale.product_name
         item = grouped.setdefault(
-            sale.product_name,
+            product_name,
             {"quantity": 0, "amount": Decimal("0")},
         )
-        item["quantity"] += sale.quantity
+        if not legacy_service:
+            item["quantity"] += sale.quantity
         item["amount"] += Decimal(str(sale.total_amount))
 
     lines = [title]
@@ -127,7 +129,10 @@ def build_personal_sales_report(
         )
     else:
         lines.append("За выбранный период продаж нет.")
-    lines.extend(["", f"Всего продано: {sum(sale.quantity for sale in sales)} шт."])
+    lines.extend([
+        "",
+        f"Всего продано: {sum(sale.quantity for sale in sales if (sale.product_name or '').strip().casefold() not in {'услуги', 'услуга'})} шт.",
+    ])
     return "\n".join(lines)
 
 
@@ -147,14 +152,20 @@ def _format_report(title: str, sales: list, empty_message: str, settings=None) -
             continue
         label, _metric = mapped
         item = actuals[label]
-        item["quantity"] += sale.quantity
+        legacy_service = (sale.product_name or "").strip().casefold() in {"услуги", "услуга"}
+        if not legacy_service:
+            item["quantity"] += sale.quantity
         item["revenue"] += Decimal(str(sale.total_amount))
 
     report_date = title.removeprefix("Отчёт о продажах за ")
     lines = ["План/факт", report_date, "O!Store Бета 2"]
     for label, plan, metric, _aliases in REPORT_ROWS:
         item = actuals[label]
-        if metric == "revenue":
+        if metric == "sa":
+            lines.append(
+                f"{label}: {plan}/ {item['quantity']}шт ({item['revenue']:.0f} сом)"
+            )
+        elif metric == "revenue":
             fact = f"{item['revenue']:.0f}"
             lines.append(f"{label}: {plan}/ {fact}")
         elif metric == "accessories":
