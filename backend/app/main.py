@@ -1406,6 +1406,25 @@ def dashboard(
     ).order_by(models.Product.name).all()
     stock_qty = sum(product.quantity for product in products)
 
+    planned_products_query = db.query(models.Product).join(
+        models.StaffProductMonthlyGoal,
+        models.StaffProductMonthlyGoal.product_id == models.Product.id,
+    ).join(
+        models.StaffAccount,
+        models.StaffAccount.telegram_id == models.StaffProductMonthlyGoal.telegram_id,
+    ).filter(
+        models.StaffProductMonthlyGoal.year == year,
+        models.StaffProductMonthlyGoal.month == month,
+        models.StaffAccount.is_active.is_(True),
+    )
+    if user.role in {"specialist", "cashier"}:
+        planned_products_query = planned_products_query.filter(
+            models.StaffProductMonthlyGoal.telegram_id == user.telegram_id
+        )
+    planned_products = apply_store_scope(
+        planned_products_query, models.Product, user, store_id
+    ).distinct().order_by(models.Product.name).all()
+
     goal = db.query(models.MonthlyGoal).filter(
         models.MonthlyGoal.year == year,
         models.MonthlyGoal.month == month,
@@ -1416,7 +1435,7 @@ def dashboard(
     quantity_progress = (sold_quantity / quantity_goal * 100) if quantity_goal > 0 else 0
 
     product_stats = {}
-    for product in products:
+    for product in planned_products:
         product_stats[("catalog", product.id)] = {
             "product_id": product.id,
             "product_name": product.name,
@@ -1427,28 +1446,11 @@ def dashboard(
         }
 
     for sale in sales:
-        if sale.product_id is not None:
-            key = ("catalog", sale.product_id)
-            if key not in product_stats:
-                product_stats[key] = {
-                    "product_id": sale.product_id,
-                    "product_name": sale.product_name,
-                    "sold_quantity": 0,
-                    "revenue": 0.0,
-                    "profit": 0.0,
-                    "stock_quantity": 0,
-                }
-        else:
-            key = ("manual", sale.product_name)
-            if key not in product_stats:
-                product_stats[key] = {
-                    "product_id": None,
-                    "product_name": sale.product_name,
-                    "sold_quantity": 0,
-                    "revenue": 0.0,
-                    "profit": 0.0,
-                    "stock_quantity": None,
-                }
+        if sale.product_id is None:
+            continue
+        key = ("catalog", sale.product_id)
+        if key not in product_stats:
+            continue
         stats = product_stats[key]
         stats["sold_quantity"] += sale.quantity
         stats["revenue"] += sale.total_amount

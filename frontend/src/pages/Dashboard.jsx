@@ -111,7 +111,7 @@ export default function Dashboard() {
       </div>
 
       <div className="card">
-        <div className="section-title">Статистика по каждому товару за месяц</div>
+        <div className="section-title">Статистика по товарам из план-факта за месяц</div>
         <div className="table-wrap">
           <table>
             <thead>
@@ -136,7 +136,7 @@ export default function Dashboard() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="5">Товары пока не добавлены</td>
+                  <td colSpan="5">На выбранный месяц товары в план-факт не назначены</td>
                 </tr>
               )}
             </tbody>
