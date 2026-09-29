@@ -1,6 +1,19 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api";
 
+const REPORT_SALE_PRESETS = [
+  "SA",
+  "Услуги",
+  "Мой",
+  "Карты",
+  "Устройства",
+  "Saima",
+  "Телефоны",
+  "Аксессуары",
+  "Вместе дешевле",
+  "O!семья",
+];
+
 const toLocalDateTime = (value) => {
   const date = new Date(value);
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
@@ -52,6 +65,7 @@ export default function Sales() {
     { product_id: "", quantity: 1, total_amount: "" },
   ]);
   const [manualName, setManualName] = useState("");
+  const [manualNameCustom, setManualNameCustom] = useState(false);
   const [manualSalePrice, setManualSalePrice] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [saleDate, setSaleDate] = useState(() => toLocalDateTime(new Date()));
@@ -295,6 +309,7 @@ export default function Sales() {
         setMessage("Продажа сохранена");
         setQuantity(1);
         setManualName("");
+        setManualNameCustom(false);
         setManualSalePrice("");
       }
       await loadProducts();
@@ -455,12 +470,27 @@ export default function Sales() {
             </div>
           ) : (
             <>
-              <input
-                placeholder="Название товара"
-                value={manualName}
-                onChange={(e) => setManualName(e.target.value)}
+              <select
+                value={manualNameCustom ? "__custom__" : manualName}
+                onChange={(event) => {
+                  const isCustom = event.target.value === "__custom__";
+                  setManualNameCustom(isCustom);
+                  setManualName(isCustom ? "" : event.target.value);
+                }}
                 required
-              />
+              >
+                <option value="">Выберите товар или услугу</option>
+                {REPORT_SALE_PRESETS.map((name) => <option key={name} value={name}>{name}</option>)}
+                <option value="__custom__">Другое название…</option>
+              </select>
+              {manualNameCustom && (
+                <input
+                  placeholder="Введите название товара или услуги"
+                  value={manualName}
+                  onChange={(event) => setManualName(event.target.value)}
+                  required
+                />
+              )}
               <input
                 type="number"
                 min="0"
