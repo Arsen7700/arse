@@ -137,6 +137,7 @@ export default function Sales() {
     return parent ? [{ value: String(parent.id), label: group.name }] : [];
   });
   const servicesProduct = productForName("Услуги");
+  const saProduct = productForName("SA");
   const productsForCategory = (categoryId) => {
     const parent = products.find((product) => product.id === Number(categoryId));
     if (!parent) return [];
@@ -369,6 +370,17 @@ export default function Sales() {
     setMessage("");
     try {
       const saleDateIso = new Date(saleDate).toISOString();
+      const saCategoryQuantity = inventoryItems.reduce((quantity, line) => {
+        const category = products.find((product) => product.id === Number(line.category_id));
+        return category?.name === "SA" ? quantity + Number(line.quantity || 0) : quantity;
+      }, 0);
+      const directSaQuantity = inventoryItems.reduce((quantity, line) => {
+        const product = products.find((item) => item.id === Number(line.product_id));
+        return product?.id === saProduct?.id ? quantity + Number(line.quantity || 0) : quantity;
+      }, 0);
+      // Child entries under SA also create a parent SA fact row. Direct SA
+      // entries are already in the submitted lines and must not be duplicated.
+      const saParentFact = Math.max(0, saCategoryQuantity - directSaQuantity);
       const payload = {
         sale_date: saleDateIso,
         items: [
@@ -381,6 +393,11 @@ export default function Sales() {
             product_id: servicesProduct.id,
             quantity: 1,
             total_amount: Number(servicesAmount),
+          }] : []),
+          ...(saParentFact > 0 && saProduct ? [{
+            product_id: saProduct.id,
+            quantity: saParentFact,
+            total_amount: 0,
           }] : []),
         ],
       };
