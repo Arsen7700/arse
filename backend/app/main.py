@@ -42,6 +42,16 @@ def require_telegram_admin(x_telegram_admin_key: Optional[str] = Header(None)):
         raise HTTPException(status_code=403, detail="Неверный ключ администратора Telegram")
 
 
+def require_telegram_report_sender(
+    user: CurrentUser = Depends(current_user),
+    x_telegram_admin_key: Optional[str] = Header(None),
+):
+    """Leads use their verified Telegram role; admins retain the extra secret check."""
+    if user.role == "lead":
+        return
+    require_telegram_admin(x_telegram_admin_key)
+
+
 def configured_telegram_admin_ids() -> set[str]:
     values = os.getenv("TELEGRAM_ADMIN_IDS") or os.getenv("TELEGRAM_ALLOWED_USER_IDS", "")
     return {value.strip() for value in values.split(",") if value.strip()}
@@ -1099,8 +1109,8 @@ def update_telegram_schedule(
 def send_telegram_report(
     payload: schemas.TelegramReportRequest,
     db: Session = Depends(get_db),
-    _admin=Depends(require_telegram_admin),
-    _user: CurrentUser = Depends(require_roles("admin")),
+    _admin=Depends(require_telegram_report_sender),
+    _user: CurrentUser = Depends(require_roles("admin", "lead")),
 ):
     schedule = db.get(models.TelegramSchedule, 1)
     timezone_name = schedule.timezone if schedule else "Asia/Almaty"

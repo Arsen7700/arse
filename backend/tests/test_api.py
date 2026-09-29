@@ -736,6 +736,21 @@ def test_manual_telegram_report_uses_admin_key_and_sends_selected_date(client, m
     assert delivered == ["report 2026-09-23 Asia/Almaty"]
 
 
+def test_lead_can_send_full_telegram_report_without_admin_key(client, monkeypatch):
+    delivered = []
+    monkeypatch.setattr(main_module, "send_telegram_message", delivered.append)
+    app.dependency_overrides[current_user] = lambda: CurrentUser(72727, "Ведущий", "lead")
+    try:
+        response = client.post(
+            "/telegram/send-report",
+            json={"report_date": "2026-09-23"},
+        )
+        assert response.status_code == 200, response.text
+        assert delivered and delivered[0].startswith("План/факт\n23.09.2026")
+    finally:
+        app.dependency_overrides.pop(current_user, None)
+
+
 def test_monthly_telegram_report_uses_plan_fact_and_zeroes(client, monkeypatch):
     monkeypatch.setenv("TELEGRAM_ADMIN_KEY", "test-admin-secret")
     # Report-only sales need no catalog product. Service facts use sold amount.

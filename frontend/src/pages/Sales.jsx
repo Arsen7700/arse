@@ -76,6 +76,7 @@ export default function Sales() {
   const readOnly = false;
   const isLead = user?.role === "lead";
   const isAdmin = user?.role === "admin";
+  const canSendFullReport = isAdmin || isLead;
   const canEditDailySettings = ["specialist", "lead", "admin"].includes(user?.role);
   const canSelectReportStore = ["lead", "admin"].includes(user?.role);
   const [products, setProducts] = useState([]);
@@ -294,7 +295,7 @@ export default function Sales() {
   };
 
   const sendReportNow = async () => {
-    if (!telegramAdminKey) {
+    if (isAdmin && !telegramAdminKey) {
       setReportMessage("Введите ключ администратора Telegram из настроек Render");
       return;
     }
@@ -312,7 +313,7 @@ export default function Sales() {
       const response = await api.post(
         "/telegram/send-report",
         reportPayload,
-        { headers: { "X-Telegram-Admin-Key": telegramAdminKey } }
+        isAdmin ? { headers: { "X-Telegram-Admin-Key": telegramAdminKey } } : {}
       );
       setReportMessage(response.data.message);
     } catch (err) {
@@ -787,9 +788,9 @@ export default function Sales() {
             )}
             {reportMessage && <div className="notice">{reportMessage}</div>}
 
-            {isAdmin && <div className="telegram-settings">
+            {canSendFullReport && <div className="telegram-settings">
               <h3>Отправка в Telegram</h3>
-              <label className="telegram-key-label">
+              {isAdmin && <label className="telegram-key-label">
                 Ключ администратора
                 <input
                   type="password"
@@ -798,15 +799,15 @@ export default function Sales() {
                   value={telegramAdminKey}
                   onChange={(event) => setTelegramAdminKey(event.target.value)}
                 />
-              </label>
-              <p className="small">Ключ действует только пока открыта эта страница и не сохраняется в браузере.</p>
+              </label>}
+              <p className="small">{isLead ? "Ведущий отправляет полный отчёт, используя свою роль Telegram." : "Ключ действует только пока открыта эта страница и не сохраняется в браузере."}</p>
               <div className="row report-actions">
                 <button type="button" className="primary" disabled={reportSending || reportLoading} onClick={sendReportNow}>
                   {reportSending ? "Отправляю…" : "Отправить отчёт сейчас"}
                 </button>
               </div>
 
-              <form className="telegram-schedule-form" onSubmit={saveTelegramSchedule}>
+              {isAdmin && <form className="telegram-schedule-form" onSubmit={saveTelegramSchedule}>
                 <label className="telegram-toggle">
                   <input
                     type="checkbox"
@@ -840,7 +841,7 @@ export default function Sales() {
                 </div>
                 <button type="submit" disabled={reportSending}>Сохранить расписание</button>
                 <p className="small">Последняя отправка: {telegramSchedule.last_sent_on || "ещё не отправлялся"}. Время доставки зависит от доступности сервера.</p>
-              </form>
+              </form>}
             </div>}
 
             <div className="row report-actions">
