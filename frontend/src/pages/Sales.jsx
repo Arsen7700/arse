@@ -76,7 +76,6 @@ export default function Sales() {
   const [inventoryItems, setInventoryItems] = useState([
     { category_id: "", product_id: "", quantity: 1, total_amount: "" },
   ]);
-  const [servicesAmount, setServicesAmount] = useState("");
   const [saleDate, setSaleDate] = useState(() => toLocalDateTime(new Date()));
   const [message, setMessage] = useState("");
   const [historyMessage, setHistoryMessage] = useState("");
@@ -136,20 +135,14 @@ export default function Sales() {
     const parent = productForName(group.name);
     return parent ? [{ value: String(parent.id), label: group.name }] : [];
   });
-  const servicesProduct = productForName("Услуги");
   const saProduct = productForName("SA");
   const productsForCategory = (categoryId) => {
     const parent = products.find((product) => product.id === Number(categoryId));
     if (!parent) return [];
     return products
-      .filter((product) => product.name !== "Услуги"
-        && (product.id === parent.id || product.parent_product_id === parent.id))
+      .filter((product) => product.id === parent.id || product.parent_product_id === parent.id)
       .sort((a, b) => Number(b.id === parent.id) - Number(a.id === parent.id));
   };
-  const hasSaCategorySelected = inventoryItems.some((line) =>
-    products.find((product) => product.id === Number(line.category_id))?.name === "SA"
-  );
-
   useEffect(() => {
     if (canSelectReportStore) {
       api.get("/stores").then((response) => {
@@ -231,8 +224,8 @@ export default function Sales() {
       : (product?.sale_price || 0) * lineQuantity;
     return sum + lineTotal - (product?.purchase_price || 0) * lineQuantity;
   }, 0);
-  const total = inventoryTotal + (hasSaCategorySelected ? Number(servicesAmount || 0) : 0);
-  const profit = inventoryProfit + (hasSaCategorySelected ? Number(servicesAmount || 0) : 0);
+  const total = inventoryTotal;
+  const profit = inventoryProfit;
   const reportActuals = new Map(REPORT_ROWS.map((row) => [row.label, { quantity: 0, revenue: 0 }]));
   const reportAliases = new Map(
     REPORT_ROWS.flatMap((row) => row.aliases.map((alias) => [alias, row.label]))
@@ -389,11 +382,6 @@ export default function Sales() {
           quantity: Number(line.quantity),
           total_amount: line.total_amount === "" ? undefined : Number(line.total_amount),
           })),
-          ...(hasSaCategorySelected && servicesAmount !== "" && servicesProduct ? [{
-            product_id: servicesProduct.id,
-            quantity: 1,
-            total_amount: Number(servicesAmount),
-          }] : []),
           ...(saParentFact > 0 && saProduct ? [{
             product_id: saProduct.id,
             quantity: saParentFact,
@@ -404,7 +392,6 @@ export default function Sales() {
       const response = await api.post("/sales/bulk", payload);
       setMessage(`Продажа сохранена. Товарных позиций: ${response.data.length}`);
       setInventoryItems([{ category_id: "", product_id: "", quantity: 1, total_amount: "" }]);
-      setServicesAmount("");
       await loadProducts();
       if (historyOpen) await loadHistory();
     } catch (err) {
@@ -480,7 +467,6 @@ export default function Sales() {
             <select value={saleStoreId} onChange={(event) => {
               setSaleStoreId(event.target.value);
               setInventoryItems([{ category_id: "", product_id: "", quantity: 1, total_amount: "" }]);
-              setServicesAmount("");
             }} required>
               {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
             </select>
@@ -545,13 +531,21 @@ export default function Sales() {
                     />
                   </label>
                   <label>
-                    Факт, сумма (для аксессуаров)
+                    {products.find((product) => product.id === Number(line.product_id))?.name === "Услуги"
+                      ? "Факт суммы услуг, сом"
+                      : products.find((product) => product.id === Number(line.product_id))?.name === "Аксессуары"
+                        ? "Факт суммы аксессуаров, сом"
+                        : "Факт, сумма (необязательно)"}
                     <input
                       type="number"
                       min="0"
                       step="0.01"
-                      placeholder="Введите сумму продаж аксессуаров"
-                      required={products.find((product) => product.id === Number(line.product_id))?.name === "Аксессуары"}
+                      placeholder={products.find((product) => product.id === Number(line.product_id))?.name === "Услуги"
+                        ? "Введите сумму услуг"
+                        : "Введите сумму продаж"}
+                      required={["Услуги", "Аксессуары"].includes(
+                        products.find((product) => product.id === Number(line.product_id))?.name
+                      )}
                       value={line.total_amount}
                       onChange={(event) => setInventoryItems(inventoryItems.map((item, itemIndex) =>
                         itemIndex === index ? { ...item, total_amount: event.target.value } : item
@@ -569,17 +563,6 @@ export default function Sales() {
                   </button>
                 </div>
               ))}
-              {hasSaCategorySelected && <label>
-                Факт суммы услуг, сом
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="Общая сумма услуг за эту продажу"
-                  value={servicesAmount}
-                  onChange={(event) => setServicesAmount(event.target.value)}
-                />
-              </label>}
               <button
                 type="button"
                 onClick={() => setInventoryItems([
