@@ -52,12 +52,12 @@ pnpm dev
 
 ## Telegram Mini App и защита доступа
 
-Production API принимает запросы только с проверенным `Telegram.WebApp.initData` и только от ID из `TELEGRAM_ALLOWED_USER_IDS`. Telegram ID и подпись проверяются на backend; `initDataUnsafe` не используется для авторизации. Обычное открытие сайта вне Telegram в production покажет подсказку запустить приложение из бота. Локальная разработка (`APP_ENV=development`) остаётся доступной без Telegram.
+Production API принимает запросы только с проверенным `Telegram.WebApp.initData` и только от ID из `TELEGRAM_ALLOWED_USER_IDS`. Telegram ID и подпись проверяются на backend; `initDataUnsafe` не используется для авторизации. Обычное открытие сайта вне Telegram в production покажет подсказку запустить приложение из бота. Локальная разработка (`APP_ENV=development`) остаётся доступной без Telegram. При запуске Mini App frontend запрашивает полноэкранный режим Telegram (`requestFullscreen`, Bot API 8.0+) и учитывает безопасные отступы экрана; если клиент его не поддерживает, приложение раскрывается до максимально доступного размера.
 
 1. Убедитесь, что `TELEGRAM_BOT_TOKEN` на Render принадлежит именно тому боту, в котором будет открываться приложение. Этот токен используется backend для проверки подписи Mini App и для отправки отчётов.
 2. Узнайте свой числовой Telegram ID. Например, его можно посмотреть у доверенного Telegram-бота, который показывает ваш ID. Не указывайте username вместо числа.
 3. На Render добавьте `TELEGRAM_ALLOWED_USER_IDS` со своим числовым ID. Для нескольких сотрудников укажите ID через запятую. Сохраните Environment и дождитесь перезапуска backend.
-4. В `@BotFather` выберите нужного бота, откройте Bot Settings и настройте Main Mini App на HTTPS-адрес frontend Vercel. Либо задайте URL для кнопки меню через Menu Button (`/setmenubutton`). Ссылка сайта: `https://arse-eta.vercel.app`.
+4. В `@BotFather` выберите нужного бота, откройте Bot Settings и настройте Main Mini App на HTTPS-адрес frontend Vercel. Для запуска используйте кнопку Mini App у профиля/бота. Ссылка сайта: `https://arse-eta.vercel.app`. Если клиент Telegram старый или не поддерживает fullscreen API, он может оставить свою верхнюю панель.
 5. Откройте чат с ботом и запустите Mini App кнопкой профиля/меню. Проверьте Dashboard, товары, продажи, историю и отчёт. API не откроет данные обычному браузеру, если запрос не содержит свежую подпись Telegram.
 
 Не отправляйте `TELEGRAM_BOT_TOKEN` и `TELEGRAM_ADMIN_KEY` в чат и не добавляйте их в GitHub. После смены бота обязательно замените `TELEGRAM_BOT_TOKEN` на Render на токен именно нового бота.

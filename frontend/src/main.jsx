@@ -6,7 +6,36 @@ import "./styles.css";
 
 const telegramWebApp = window.Telegram?.WebApp;
 telegramWebApp?.ready();
-telegramWebApp?.expand();
+telegramWebApp?.setHeaderColor?.("#111827");
+telegramWebApp?.setBackgroundColor?.("#0b1220");
+
+if (telegramWebApp) {
+  const syncFullscreenState = () => {
+    document.documentElement.classList.toggle(
+      "telegram-fullscreen",
+      Boolean(telegramWebApp.isFullscreen)
+    );
+  };
+  const fallbackToExpandedView = () => {
+    telegramWebApp.expand();
+    syncFullscreenState();
+  };
+
+  telegramWebApp.onEvent?.("fullscreenChanged", syncFullscreenState);
+  telegramWebApp.onEvent?.("fullscreenFailed", fallbackToExpandedView);
+  syncFullscreenState();
+  telegramWebApp.expand();
+
+  if (typeof telegramWebApp.requestFullscreen === "function") {
+    try {
+      telegramWebApp.requestFullscreen();
+    } catch {
+      fallbackToExpandedView();
+    }
+  } else {
+    fallbackToExpandedView();
+  }
+}
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
