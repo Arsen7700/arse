@@ -445,9 +445,9 @@ def test_monthly_telegram_report_uses_plan_fact_and_zeroes(client, monkeypatch):
     assert response.status_code == 200, response.text
     assert delivered[0].startswith("План/факт\n09.2026\nO!Store Бета 2")
     assert "Услуги: 15000/ 16710" in delivered[0]
-    assert "Карты: 25/ 2" in delivered[0]
+    assert "SA: 30/ 2" in delivered[0]
+    assert "Карты: 25/ 0" in delivered[0]
     assert "Мой: 25/ 0" in delivered[0]
-    assert "SA: 30/ 0" in delivered[0]
     assert "Аксессуары: 3100/ 0шт (0)" in delivered[0]
     assert "средняя цена" not in delivered[0]
     assert "Общая выручка" not in delivered[0]
