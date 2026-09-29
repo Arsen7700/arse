@@ -76,7 +76,9 @@ export default function Sales() {
   const readOnly = false;
   const isLead = user?.role === "lead";
   const isAdmin = user?.role === "admin";
+  const isOwnSalesRole = ["specialist", "cashier"].includes(user?.role);
   const canSendFullReport = isAdmin || isLead;
+  const canSendReport = canSendFullReport || isOwnSalesRole;
   const canEditDailySettings = ["specialist", "lead", "admin"].includes(user?.role);
   const canSelectReportStore = ["lead", "admin"].includes(user?.role);
   const [products, setProducts] = useState([]);
@@ -243,7 +245,24 @@ export default function Sales() {
   const reportPeriodLabel = reportPeriod === "day"
     ? (reportDate ? reportDate.split("-").reverse().join(".") : "")
     : (reportMonth ? `${reportMonth.slice(5, 7)}.${reportMonth.slice(0, 4)}` : "");
-  const reportText = [
+  const ownSalesByProduct = new Map();
+  reportSales.forEach((sale) => {
+    const item = ownSalesByProduct.get(sale.product_name) || { quantity: 0, amount: 0 };
+    item.quantity += sale.quantity;
+    item.amount += Number(sale.total_amount || 0);
+    ownSalesByProduct.set(sale.product_name, item);
+  });
+  const personalReportText = [
+    `Мои продажи за ${reportPeriodLabel}`,
+    ...(ownSalesByProduct.size
+      ? [...ownSalesByProduct.entries()]
+        .sort(([a], [b]) => a.localeCompare(b, "ru"))
+        .map(([name, item]) => `• ${name} — ${item.quantity} шт.; сумма ${item.amount.toFixed(2)} сом`)
+      : ["За выбранный период продаж нет."]),
+    "",
+    `Всего продано: ${reportSales.reduce((sum, sale) => sum + sale.quantity, 0)} шт.`,
+  ].join("\n");
+  const fullReportText = [
     "План/факт",
     reportPeriodLabel,
     "O!Store Бета 2",
@@ -261,6 +280,7 @@ export default function Sales() {
     `Инкассация: ${reportPeriod === "day" ? dailySettings.collection_status : "нет"}`,
     "Отказы со стороны банка:0 2",
   ].join("\n");
+  const reportText = isOwnSalesRole ? personalReportText : fullReportText;
 
   const saveDailySettings = async () => {
     if (!reportDate) return;
@@ -788,7 +808,7 @@ export default function Sales() {
             )}
             {reportMessage && <div className="notice">{reportMessage}</div>}
 
-            {canSendFullReport && <div className="telegram-settings">
+            {canSendReport && <div className="telegram-settings">
               <h3>Отправка в Telegram</h3>
               {isAdmin && <label className="telegram-key-label">
                 Ключ администратора
@@ -800,7 +820,13 @@ export default function Sales() {
                   onChange={(event) => setTelegramAdminKey(event.target.value)}
                 />
               </label>}
-              <p className="small">{isLead ? "Ведущий отправляет полный отчёт, используя свою роль Telegram." : "Ключ действует только пока открыта эта страница и не сохраняется в браузере."}</p>
+              <p className="small">
+                {isOwnSalesRole
+                  ? "Вы отправляете только свои продажи за выбранный период."
+                  : isLead
+                    ? "Ведущий отправляет полный отчёт, используя свою роль Telegram."
+                    : "Ключ действует только пока открыта эта страница и не сохраняется в браузере."}
+              </p>
               <div className="row report-actions">
                 <button type="button" className="primary" disabled={reportSending || reportLoading} onClick={sendReportNow}>
                   {reportSending ? "Отправляю…" : "Отправить отчёт сейчас"}

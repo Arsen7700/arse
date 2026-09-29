@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import extract, func, update
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from .database import Base, engine, get_db, SessionLocal
@@ -20,6 +20,7 @@ from .access import CurrentUser, apply_store_scope, assigned_store_id, current_u
 from .telegram_reports import (
     build_daily_report,
     build_monthly_report,
+    build_personal_sales_report,
     check_and_send_scheduled_report,
     send_telegram_message,
 )
@@ -47,7 +48,7 @@ def require_telegram_report_sender(
     x_telegram_admin_key: Optional[str] = Header(None),
 ):
     """Leads use their verified Telegram role; admins retain the extra secret check."""
-    if user.role == "lead":
+    if user.role in {"lead", "specialist", "cashier"}:
         return
     require_telegram_admin(x_telegram_admin_key)
 
@@ -1110,12 +1111,29 @@ def send_telegram_report(
     payload: schemas.TelegramReportRequest,
     db: Session = Depends(get_db),
     _admin=Depends(require_telegram_report_sender),
-    _user: CurrentUser = Depends(require_roles("admin", "lead")),
+    _user: CurrentUser = Depends(require_roles("admin", "lead", "specialist", "cashier")),
 ):
     schedule = db.get(models.TelegramSchedule, 1)
     timezone_name = schedule.timezone if schedule else "Asia/Almaty"
     try:
-        if payload.period == "month":
+        if _user.role in {"specialist", "cashier"}:
+            zone = ZoneInfo(timezone_name)
+            if payload.period == "month":
+                start_local = datetime(payload.report_year, payload.report_month, 1, tzinfo=zone)
+                end_local = (
+                    datetime(payload.report_year + 1, 1, 1, tzinfo=zone)
+                    if payload.report_month == 12
+                    else datetime(payload.report_year, payload.report_month + 1, 1, tzinfo=zone)
+                )
+                title = f"Мои продажи за {payload.report_month:02d}.{payload.report_year}"
+            else:
+                start_local = datetime.combine(payload.report_date, datetime.min.time(), tzinfo=zone)
+                end_local = start_local + timedelta(days=1)
+                title = f"Мои продажи за {payload.report_date.strftime('%d.%m.%Y')}"
+            start = start_local.astimezone(timezone.utc).replace(tzinfo=None)
+            end = end_local.astimezone(timezone.utc).replace(tzinfo=None)
+            report = build_personal_sales_report(db, start, end, title, _user.telegram_id)
+        elif payload.period == "month":
             report = build_monthly_report(
                 db, payload.report_year, payload.report_month, timezone_name, payload.store_id
             )

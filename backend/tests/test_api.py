@@ -751,6 +751,48 @@ def test_lead_can_send_full_telegram_report_without_admin_key(client, monkeypatc
         app.dependency_overrides.pop(current_user, None)
 
 
+@pytest.mark.parametrize("role", ["specialist", "cashier"])
+def test_staff_can_send_only_their_own_sales(role, client, monkeypatch):
+    delivered = []
+    monkeypatch.setattr(main_module, "send_telegram_message", delivered.append)
+    store = client.post("/admin/stores", json={"name": "Личная лавочка"}).json()
+
+    for telegram_id, display_name, product_name in (
+        (73737, "Сотрудник", "Моя продажа"),
+        (74747, "Другой сотрудник", "Чужая продажа"),
+    ):
+        app.dependency_overrides[current_user] = lambda telegram_id=telegram_id, display_name=display_name: CurrentUser(
+            telegram_id, display_name, role, store["id"]
+        )
+        created = client.post(
+            "/sales",
+            json={
+                "product_name": product_name,
+                "unit_sale_price": 42,
+                "quantity": 2,
+                "sale_date": "2026-09-23T10:00:00",
+            },
+        )
+        assert created.status_code == 200, created.text
+
+    app.dependency_overrides[current_user] = lambda: CurrentUser(
+        73737, "Сотрудник", role, store["id"]
+    )
+    try:
+        response = client.post(
+            "/telegram/send-report",
+            json={"report_date": "2026-09-23"},
+        )
+        assert response.status_code == 200, response.text
+        assert delivered[0].startswith("Мои продажи за 23.09.2026")
+        assert "Моя продажа — 2 шт.; сумма 84.00 сом" in delivered[0]
+        assert "Чужая продажа" not in delivered[0]
+        assert "План/факт" not in delivered[0]
+        assert "Всего продано: 2 шт." in delivered[0]
+    finally:
+        app.dependency_overrides.pop(current_user, None)
+
+
 def test_monthly_telegram_report_uses_plan_fact_and_zeroes(client, monkeypatch):
     monkeypatch.setenv("TELEGRAM_ADMIN_KEY", "test-admin-secret")
     # Report-only sales need no catalog product. Service facts use sold amount.

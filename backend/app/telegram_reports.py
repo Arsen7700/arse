@@ -92,6 +92,45 @@ def build_monthly_report(
     )
 
 
+def build_personal_sales_report(
+    db: Session,
+    start: datetime,
+    end: datetime,
+    title: str,
+    telegram_id: int,
+) -> str:
+    """Build a simple report containing only the authenticated seller's sales."""
+    sales = (
+        db.query(models.Sale)
+        .filter(
+            models.Sale.created_by_telegram_id == telegram_id,
+            models.Sale.sale_date >= start,
+            models.Sale.sale_date < end,
+        )
+        .order_by(models.Sale.sale_date, models.Sale.product_name)
+        .all()
+    )
+    grouped: dict[str, dict[str, Decimal | int]] = {}
+    for sale in sales:
+        item = grouped.setdefault(
+            sale.product_name,
+            {"quantity": 0, "amount": Decimal("0")},
+        )
+        item["quantity"] += sale.quantity
+        item["amount"] += Decimal(str(sale.total_amount))
+
+    lines = [title]
+    if grouped:
+        lines.extend(
+            f"• {name} — {item['quantity']} шт.; сумма {item['amount']:.2f} сом"
+            for name, item in sorted(grouped.items(), key=lambda row: row[0].casefold())
+        )
+    else:
+        lines.append("За выбранный период продаж нет.")
+    lines.extend(["", f"Всего продано: {sum(sale.quantity for sale in sales)} шт."])
+    return "\n".join(lines)
+
+
 def _format_report(title: str, sales: list, empty_message: str, settings=None) -> str:
     normalized_aliases = {
         alias.casefold(): (label, metric)
