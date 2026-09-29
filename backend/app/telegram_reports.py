@@ -135,7 +135,7 @@ def _format_report(title: str, sales: list, empty_message: str, settings=None) -
     lines.extend(
         [
             f"Лимит Дс {settings.cash_limit if settings else '60к'}",
-            f"Остаток ЛС: {settings.cash_remaining if settings else '80к'}",
+            f"Остаток ДС: {settings.cash_remaining if settings else '80к'}",
             f"Инкассация: {settings.collection_status if settings else 'нет'}",
             "Отказы со стороны банка:0 2",
         ]

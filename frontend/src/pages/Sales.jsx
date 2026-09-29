@@ -256,7 +256,7 @@ export default function Sales() {
       return `${row.label}: ${row.plan}/ ${actual.quantity}`;
     }),
     `Лимит Дс ${reportPeriod === "day" ? dailySettings.cash_limit : "60к"}`,
-    `Остаток ЛС: ${reportPeriod === "day" ? dailySettings.cash_remaining : "80к"}`,
+    `Остаток ДС: ${reportPeriod === "day" ? dailySettings.cash_remaining : "80к"}`,
     `Инкассация: ${reportPeriod === "day" ? dailySettings.collection_status : "нет"}`,
     "Отказы со стороны банка:0 2",
   ].join("\n");
@@ -774,7 +774,7 @@ export default function Sales() {
               <section className="daily-report-settings">
                 <h3>Данные кассы за день</h3>
                 <label>Лимит ДС<input maxLength={100} value={dailySettings.cash_limit} onChange={(event) => setDailySettings({ ...dailySettings, cash_limit: event.target.value })} /></label>
-                <label>Остаток ЛС<input maxLength={100} value={dailySettings.cash_remaining} onChange={(event) => setDailySettings({ ...dailySettings, cash_remaining: event.target.value })} /></label>
+                <label>Остаток ДС<input maxLength={100} value={dailySettings.cash_remaining} onChange={(event) => setDailySettings({ ...dailySettings, cash_remaining: event.target.value })} /></label>
                 <label>Инкассация<input maxLength={100} value={dailySettings.collection_status} onChange={(event) => setDailySettings({ ...dailySettings, collection_status: event.target.value })} /></label>
                 <button type="button" onClick={saveDailySettings}>Сохранить данные кассы</button>
               </section>

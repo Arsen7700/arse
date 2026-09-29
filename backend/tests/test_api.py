@@ -834,7 +834,7 @@ def test_daily_telegram_report_includes_selected_store_cash_fields(client, monke
 
     assert response.status_code == 200, response.text
     assert "Лимит Дс 55к" in delivered[0]
-    assert "Остаток ЛС: 12к" in delivered[0]
+    assert "Остаток ДС: 12к" in delivered[0]
     assert "Инкассация: да" in delivered[0]
 
 
