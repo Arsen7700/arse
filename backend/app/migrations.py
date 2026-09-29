@@ -40,15 +40,17 @@ def migrate_store_and_staff_schema(engine: Engine) -> None:
             {"name": "Основная лавочка"},
         ).scalar_one_or_none()
         if store_id is None:
-            result = connection.exec_driver_sql(
-                "INSERT INTO stores (name, is_active, created_at) "
-                "VALUES ('Основная лавочка', TRUE, CURRENT_TIMESTAMP)"
+            connection.execute(
+                text(
+                    "INSERT INTO stores (name, is_active, created_at) "
+                    "VALUES (:name, TRUE, CURRENT_TIMESTAMP)"
+                ),
+                {"name": "Основная лавочка"},
             )
-            store_id = result.lastrowid
-            if store_id is None:
-                store_id = connection.exec_driver_sql(
-                    "SELECT id FROM stores WHERE name = 'Основная лавочка'"
-                ).scalar_one()
+            store_id = connection.execute(
+                text("SELECT id FROM stores WHERE name = :name"),
+                {"name": "Основная лавочка"},
+            ).scalar_one()
 
         columns_by_table = {
             "products": {column["name"] for column in inspect(connection).get_columns("products")},
