@@ -10,6 +10,13 @@ telegramWebApp?.setHeaderColor?.("#111827");
 telegramWebApp?.setBackgroundColor?.("#0b1220");
 
 if (telegramWebApp) {
+  // Keep Telegram's minimize/close swipe from intercepting vertical page scrolling.
+  try {
+    telegramWebApp.disableVerticalSwipes?.();
+  } catch {
+    // Older Telegram clients may not support the swipe behavior API.
+  }
+
   const syncFullscreenState = () => {
     document.documentElement.classList.toggle(
       "telegram-fullscreen",
