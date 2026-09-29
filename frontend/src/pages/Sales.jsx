@@ -140,8 +140,10 @@ export default function Sales() {
   const productsForCategory = (categoryId) => {
     const parent = products.find((product) => product.id === Number(categoryId));
     if (!parent) return [];
-    return products.filter((product) => product.name !== "Услуги"
-      && (product.id === parent.id || product.parent_product_id === parent.id));
+    return products
+      .filter((product) => product.name !== "Услуги"
+        && (product.id === parent.id || product.parent_product_id === parent.id))
+      .sort((a, b) => Number(b.id === parent.id) - Number(a.id === parent.id));
   };
   const hasSaCategorySelected = inventoryItems.some((line) =>
     products.find((product) => product.id === Number(line.category_id))?.name === "SA"
@@ -475,7 +477,11 @@ export default function Sales() {
                     <select
                       value={line.category_id}
                       onChange={(event) => setInventoryItems(inventoryItems.map((item, itemIndex) =>
-                        itemIndex === index ? { ...item, category_id: event.target.value, product_id: "" } : item
+                        itemIndex === index ? {
+                          ...item,
+                          category_id: event.target.value,
+                          product_id: event.target.value,
+                        } : item
                       ))}
                       required
                     >
@@ -503,7 +509,7 @@ export default function Sales() {
                       {productsForCategory(line.category_id).map((product) => (
                         <option key={product.id} value={product.id}>
                           {product.name === products.find((item) => item.id === Number(line.category_id))?.name
-                            ? product.name
+                            ? product.name === "SA" ? "SA — факт SA" : product.name
                             : `${products.find((item) => item.id === Number(line.category_id))?.name} → ${product.name}`}
                         </option>
                       ))}
