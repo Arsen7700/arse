@@ -66,7 +66,7 @@ export default function Sales() {
   const isOwnSalesRole = ["specialist", "cashier"].includes(user?.role);
   const canSendFullReport = isAdmin || isLead;
   const canSendReport = canSendFullReport || isOwnSalesRole;
-  const canEditDailySettings = ["specialist", "lead", "admin"].includes(user?.role);
+  const canEditDailySettings = ["specialist", "cashier", "lead", "admin"].includes(user?.role);
   const canSelectReportStore = ["lead", "admin"].includes(user?.role);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);

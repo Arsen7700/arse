@@ -467,7 +467,7 @@ def get_daily_report_settings(
     report_date: date = Query(...),
     store_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_roles("specialist", "lead")),
+    user: CurrentUser = Depends(require_roles("specialist", "cashier", "lead")),
 ):
     selected_store_id = resolve_report_store(db, user, store_id)
     settings = db.query(models.DailyReportSettings).filter_by(
@@ -480,7 +480,7 @@ def get_daily_report_settings(
 def update_daily_report_settings(
     payload: schemas.DailyReportSettingsUpdate,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_roles("specialist", "lead")),
+    user: CurrentUser = Depends(require_roles("specialist", "cashier", "lead")),
 ):
     selected_store_id = resolve_report_store(db, user, payload.store_id)
     settings = db.query(models.DailyReportSettings).filter_by(
