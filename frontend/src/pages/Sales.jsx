@@ -14,6 +14,19 @@ const REPORT_SALE_PRESETS = [
   "O!семья",
 ];
 
+const REPORT_ROWS = [
+  { label: "SA", plan: 30, metric: "quantity", aliases: ["sa", "sim-карта", "sim карта", "сим-карта", "сим карта", "сим-карты"] },
+  { label: "Услуги", plan: 15000, metric: "revenue", aliases: ["услуги", "услуга"] },
+  { label: "Мой", plan: 25, metric: "quantity", aliases: ["мой", "мой!"] },
+  { label: "Карты", plan: 25, metric: "quantity", aliases: ["карты", "карта"] },
+  { label: "Устройства", plan: 2, metric: "devices", aliases: ["устройства", "устройство"] },
+  { label: "Saima", plan: 1, metric: "quantity", aliases: ["saima"] },
+  { label: "Телефоны", plan: 2, metric: "quantity", aliases: ["телефоны", "телефон"] },
+  { label: "Аксессуары", plan: 3100, metric: "accessories", aliases: ["аксессуары", "аксессуар"] },
+  { label: "Вместе дешевле", plan: 0, metric: "bundle", aliases: ["вместе дешевле"] },
+  { label: "O!семья", plan: 0, metric: "family", aliases: ["o!семья", "o! семья"] },
+];
+
 const toLocalDateTime = (value) => {
   const date = new Date(value);
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
@@ -187,33 +200,37 @@ export default function Sales() {
   const profit = saleType === "inventory"
     ? inventoryProfit
     : total;
-  const reportByProduct = new Map();
+  const reportActuals = new Map(REPORT_ROWS.map((row) => [row.label, { quantity: 0, revenue: 0 }]));
+  const reportAliases = new Map(
+    REPORT_ROWS.flatMap((row) => row.aliases.map((alias) => [alias, row.label]))
+  );
   reportSales.forEach((sale) => {
-    const name = sale.product_name || "Товар без названия";
-    const item = reportByProduct.get(name) || {
-      product_name: name,
-      quantity: 0,
-      revenue: 0,
-    };
+    const label = reportAliases.get((sale.product_name || "").trim().toLocaleLowerCase("ru-RU"));
+    if (!label) return;
+    const item = reportActuals.get(label);
     item.quantity += sale.quantity;
-    item.revenue += sale.total_amount;
-    reportByProduct.set(name, item);
+    item.revenue += Number(sale.total_amount || 0);
   });
-  const reportLines = [...reportByProduct.values()]
-    .sort((a, b) => a.product_name.localeCompare(b.product_name, "ru"))
-    .map((item) => {
-      return `• ${item.product_name} — ${item.quantity} шт.; сумма ${item.revenue.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} сом`;
-    });
-  const reportQuantity = [...reportByProduct.values()].reduce((sum, item) => sum + item.quantity, 0);
   const reportPeriodLabel = reportPeriod === "day"
-    ? (reportDate ? new Date(`${reportDate}T00:00:00`).toLocaleDateString("ru-RU") : "")
-    : (reportMonth ? new Date(`${reportMonth}-01T00:00:00`).toLocaleDateString("ru-RU", { month: "long", year: "numeric" }) : "");
+    ? (reportDate ? reportDate.split("-").reverse().join(".") : "")
+    : (reportMonth ? `${reportMonth.slice(5, 7)}.${reportMonth.slice(0, 4)}` : "");
   const reportText = [
-    `Отчёт о продажах за ${reportPeriodLabel}`,
-    "",
-    ...(reportLines.length ? reportLines : [reportPeriod === "day" ? "За выбранный день продаж нет." : "За выбранный месяц продаж нет."]),
-    "",
-    `Всего продано: ${reportQuantity} шт.`,
+    "План/факт",
+    reportPeriodLabel,
+    "O!Store Бета 2",
+    ...REPORT_ROWS.map((row) => {
+      const actual = reportActuals.get(row.label);
+      if (row.metric === "revenue") return `${row.label}: ${row.plan}/ ${Math.round(actual.revenue)}`;
+      if (row.metric === "accessories") return `${row.label}: ${row.plan}/ ${actual.quantity}шт (${Math.round(actual.revenue)})`;
+      if (row.metric === "devices") return `${row.label}: ${row.plan} \\ ${actual.quantity}`;
+      if (row.metric === "family") return `${row.label}-${actual.quantity}`;
+      if (row.metric === "bundle") return `${row.label} ${actual.quantity}`;
+      return `${row.label}: ${row.plan}/ ${actual.quantity}`;
+    }),
+    "Лимит Дс 60к",
+    "Остаток ЛС: 80к",
+    "Инкассация: нет",
+    "Отказы со стороны банка:0 2",
   ].join("\n");
 
   const copyReport = async () => {
