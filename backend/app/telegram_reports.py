@@ -12,6 +12,24 @@ from sqlalchemy.orm import Session
 
 from . import models
 
+REPORT_ROWS = (
+    ("SA", 30, "quantity", ("sa",)),
+    ("Услуги", 15000, "revenue", ("услуги", "услуга")),
+    ("Мой", 25, "quantity", ("мой", "мой!")),
+    (
+        "Карты",
+        25,
+        "quantity",
+        ("карты", "карта", "sim-карта", "sim карта", "сим-карта", "сим карта", "сим-карты"),
+    ),
+    ("Устройства", 2, "quantity", ("устройства", "устройство")),
+    ("Saima", 1, "quantity", ("saima",)),
+    ("Телефоны", 2, "quantity", ("телефоны", "телефон")),
+    ("Аксессуары", 3100, "accessories", ("аксессуары", "аксессуар")),
+    ("Вместе дешевле", 0, "quantity", ("вместе дешевле",)),
+    ("O!семья", 0, "quantity", ("o!семья", "o! семья")),
+)
+
 
 def build_daily_report(db: Session, report_date: date, timezone_name: str) -> str:
     zone = ZoneInfo(timezone_name)
@@ -60,29 +78,51 @@ def build_monthly_report(db: Session, year: int, month: int, timezone_name: str)
 
 
 def _format_report(title: str, sales: list, empty_message: str) -> str:
-    grouped = {}
+    normalized_aliases = {
+        alias.casefold(): (label, metric)
+        for label, _plan, metric, aliases in REPORT_ROWS
+        for alias in aliases
+    }
+    actuals = {
+        label: {"quantity": 0, "revenue": Decimal("0")}
+        for label, _plan, _metric, _aliases in REPORT_ROWS
+    }
     for sale in sales:
-        name = sale.product_name or "Товар без названия"
-        item = grouped.setdefault(name, {"quantity": 0, "revenue": Decimal("0")})
+        mapped = normalized_aliases.get((sale.product_name or "").strip().casefold())
+        if mapped is None:
+            continue
+        label, _metric = mapped
+        item = actuals[label]
         item["quantity"] += sale.quantity
         item["revenue"] += Decimal(str(sale.total_amount))
 
-    lines = [title, ""]
-    if grouped:
-        for name, item in sorted(grouped.items(), key=lambda pair: pair[0].casefold()):
-            quantity = item["quantity"]
-            revenue = item["revenue"]
+    report_date = title.removeprefix("Отчёт о продажах за ")
+    lines = ["План/факт", report_date, "O!Store Бета 2"]
+    for label, plan, metric, _aliases in REPORT_ROWS:
+        item = actuals[label]
+        if metric == "revenue":
+            fact = f"{item['revenue']:.0f}"
+            lines.append(f"{label}: {plan}/ {fact}")
+        elif metric == "accessories":
+            fact_amount = f"{item['revenue']:.0f}"
             lines.append(
-                f"• {name} — {quantity} шт.; сумма {revenue:.2f} сом"
+                f"{label}: {plan}/ {item['quantity']}шт ({fact_amount})"
             )
-    else:
-        lines.append(empty_message)
+        elif label == "Устройства":
+            lines.append(f"{label}: {plan} \\ {item['quantity']}")
+        elif label == "O!семья":
+            lines.append(f"{label}-{item['quantity']}")
+        elif label == "Вместе дешевле":
+            lines.append(f"{label} {item['quantity']}")
+        else:
+            lines.append(f"{label}: {plan}/ {item['quantity']}")
 
-    total_quantity = sum(item["quantity"] for item in grouped.values())
     lines.extend(
         [
-            "",
-            f"Всего продано: {total_quantity} шт.",
+            "Лимит Дс 60к",
+            "Остаток ЛС: 80к",
+            "Инкассация: нет",
+            "Отказы со стороны банка:0 2",
         ]
     )
     return "\n".join(lines)

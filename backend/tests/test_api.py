@@ -410,18 +410,29 @@ def test_manual_telegram_report_uses_admin_key_and_sends_selected_date(client, m
     assert delivered == ["report 2026-09-23 Asia/Almaty"]
 
 
-def test_monthly_telegram_report_groups_sales_by_product(client, monkeypatch):
+def test_monthly_telegram_report_uses_plan_fact_and_zeroes(client, monkeypatch):
     monkeypatch.setenv("TELEGRAM_ADMIN_KEY", "test-admin-secret")
-    product = create_product(client)
-    created = client.post(
+    # Report-only sales need no catalog product. Service facts use sold amount.
+    service = client.post(
         "/sales",
         json={
-            "product_id": product["id"],
-            "quantity": 2,
+            "product_name": "Услуги",
+            "quantity": 1,
+            "unit_sale_price": 16710,
             "sale_date": "2026-09-15T12:00:00",
         },
     )
-    assert created.status_code == 200, created.text
+    assert service.status_code == 200, service.text
+    card = client.post(
+        "/sales",
+        json={
+            "product_name": "SIM-карта",
+            "quantity": 2,
+            "unit_sale_price": 0,
+            "sale_date": "2026-09-15T12:30:00",
+        },
+    )
+    assert card.status_code == 200, card.text
     delivered = []
     monkeypatch.setattr(main_module, "send_telegram_message", delivered.append)
 
@@ -432,11 +443,53 @@ def test_monthly_telegram_report_groups_sales_by_product(client, monkeypatch):
     )
 
     assert response.status_code == 200, response.text
-    assert "Отчёт о продажах за 09.2026" in delivered[0]
-    assert "Тестовый товар — 2 шт." in delivered[0]
-    assert "сумма 50.00 сом" in delivered[0]
+    assert delivered[0].startswith("План/факт\n09.2026\nO!Store Бета 2")
+    assert "Услуги: 15000/ 16710" in delivered[0]
+    assert "Карты: 25/ 2" in delivered[0]
+    assert "Мой: 25/ 0" in delivered[0]
+    assert "SA: 30/ 0" in delivered[0]
+    assert "Аксессуары: 3100/ 0шт (0)" in delivered[0]
     assert "средняя цена" not in delivered[0]
     assert "Общая выручка" not in delivered[0]
+
+
+def test_monthly_telegram_report_shows_zero_facts_without_sales(client, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_KEY", "test-admin-secret")
+    delivered = []
+    monkeypatch.setattr(main_module, "send_telegram_message", delivered.append)
+
+    response = client.post(
+        "/telegram/send-report",
+        json={"period": "month", "report_year": 2026, "report_month": 9},
+        headers={"X-Telegram-Admin-Key": "test-admin-secret"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert delivered[0].startswith("План/факт\n09.2026\nO!Store Бета 2")
+    assert "SA: 30/ 0" in delivered[0]
+    assert "Услуги: 15000/ 0" in delivered[0]
+    assert "Мой: 25/ 0" in delivered[0]
+    assert "Карты: 25/ 0" in delivered[0]
+    assert "Устройства: 2 \\ 0" in delivered[0]
+    assert "Аксессуары: 3100/ 0шт (0)" in delivered[0]
+
+
+def test_daily_telegram_report_shows_zero_facts_without_sales(client, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_KEY", "test-admin-secret")
+    delivered = []
+    monkeypatch.setattr(main_module, "send_telegram_message", delivered.append)
+
+    response = client.post(
+        "/telegram/send-report",
+        json={"report_date": "2026-09-29"},
+        headers={"X-Telegram-Admin-Key": "test-admin-secret"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert delivered[0].startswith("План/факт\n29.09.2026\nO!Store Бета 2")
+    assert "SA: 30/ 0" in delivered[0]
+    assert "Мой: 25/ 0" in delivered[0]
+    assert "Карты: 25/ 0" in delivered[0]
 
 
 def test_monthly_telegram_report_requires_valid_year_and_month(client, monkeypatch):
