@@ -655,6 +655,90 @@ def list_products(
         q = q.filter(models.Product.category_id == category_id)
     return q.order_by(models.Product.id.desc()).all()
 
+
+@app.get("/saleable-products", response_model=list[schemas.ProductOut])
+def list_saleable_products(
+    year: Optional[int] = Query(None, ge=2000, le=2100),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(current_user),
+):
+    now = datetime.now(ZoneInfo(os.getenv("APP_TIMEZONE", "Asia/Almaty")))
+    target_year = now.year if year is None else year
+    target_month = now.month if month is None else month
+    q = db.query(models.Product).join(
+        models.StaffProductMonthlyGoal,
+        models.StaffProductMonthlyGoal.product_id == models.Product.id,
+    ).join(
+        models.StaffAccount,
+        models.StaffAccount.telegram_id == models.StaffProductMonthlyGoal.telegram_id,
+    ).filter(
+        models.StaffProductMonthlyGoal.year == target_year,
+        models.StaffProductMonthlyGoal.month == target_month,
+        models.StaffAccount.is_active.is_(True),
+    )
+    if user.role in {"specialist", "cashier"}:
+        q = q.filter(models.StaffProductMonthlyGoal.telegram_id == user.telegram_id)
+    q = apply_store_scope(q, models.Product, user)
+    return q.distinct().order_by(models.Product.name).all()
+
+
+@app.get("/saleable-products", response_model=list[schemas.ProductOut])
+def list_saleable_products(
+    year: Optional[int] = Query(None, ge=2000, le=2100),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(current_user),
+):
+    now = datetime.now(ZoneInfo(os.getenv("APP_TIMEZONE", "Asia/Almaty")))
+    target_year = now.year if year is None else year
+    target_month = now.month if month is None else month
+    q = db.query(models.Product).join(
+        models.StaffProductMonthlyGoal,
+        models.StaffProductMonthlyGoal.product_id == models.Product.id,
+    ).join(
+        models.StaffAccount,
+        models.StaffAccount.telegram_id == models.StaffProductMonthlyGoal.telegram_id,
+    ).filter(
+        models.StaffProductMonthlyGoal.year == target_year,
+        models.StaffProductMonthlyGoal.month == target_month,
+        models.StaffAccount.is_active.is_(True),
+    )
+    if user.role in {"specialist", "cashier"}:
+        q = q.filter(models.StaffProductMonthlyGoal.telegram_id == user.telegram_id)
+    q = apply_store_scope(q, models.Product, user)
+    return q.distinct().order_by(models.Product.name).all()
+
+
+def require_sale_plan(db: Session, product: models.Product, user: CurrentUser, sale_date: datetime):
+    zone = ZoneInfo(os.getenv("APP_TIMEZONE", "Asia/Almaty"))
+    local_sale_date = sale_date.astimezone(zone) if sale_date.tzinfo else sale_date
+    plan_query = db.query(models.StaffProductMonthlyGoal.id).join(
+        models.StaffAccount,
+        models.StaffAccount.telegram_id == models.StaffProductMonthlyGoal.telegram_id,
+    ).filter(
+        models.StaffProductMonthlyGoal.product_id == product.id,
+        models.StaffProductMonthlyGoal.year == local_sale_date.year,
+        models.StaffProductMonthlyGoal.month == local_sale_date.month,
+        models.StaffAccount.is_active.is_(True),
+    )
+    if user.role in {"specialist", "cashier"}:
+        plan_query = plan_query.filter(
+            models.StaffProductMonthlyGoal.telegram_id == user.telegram_id
+        )
+    if not plan_query.first():
+        raise HTTPException(
+            status_code=400,
+            detail="Этот товар не включён в план-факт на месяц продажи",
+        )
+
+
+def require_sale_product(db: Session, product_id: int, sale_date: datetime, user: CurrentUser):
+    product = require_product_access(db, product_id, user)
+    assigned_store_id(user, product.store_id)
+    require_sale_plan(db, product, user, sale_date)
+    return product
+
 @app.put("/products/{product_id}", response_model=schemas.ProductOut)
 def update_product(
     product_id: int,
@@ -732,25 +816,15 @@ def create_sale(
     db: Session = Depends(get_db),
     user: CurrentUser = Depends(require_roles("specialist", "cashier", "lead")),
 ):
-    product = None
-    if payload.product_id is not None:
-        product = require_product_access(db, payload.product_id, user)
-        assigned_store_id(user, product.store_id)
-        sale_store_id = product.store_id
-        product_name = product.name
-        sale_price = product.sale_price
-        purchase_price = product.purchase_price
-    else:
-        if user.role == "lead" and payload.store_id is None:
-            raise HTTPException(status_code=422, detail="Для продажи без товара выберите лавочку")
-        sale_store_id = assigned_store_id(user, payload.store_id)
-        store = get_store(db, sale_store_id) if sale_store_id is not None else ensure_default_store(db)
-        sale_store_id = store.id
-        product_name = payload.product_name.strip()
-        sale_price = payload.unit_sale_price
-        purchase_price = 0
+    if payload.product_id is None:
+        raise HTTPException(status_code=400, detail="Продажа возможна только по товару из каталога")
+    product = require_sale_product(db, payload.product_id, payload.sale_date, user)
+    sale_store_id = product.store_id
+    product_name = product.name
+    sale_price = product.sale_price
+    purchase_price = product.purchase_price
 
-    if product and payload.total_amount is not None:
+    if payload.total_amount is not None:
         total_decimal = Decimal(str(payload.total_amount)).quantize(
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
@@ -782,20 +856,19 @@ def create_sale(
         sale_date=payload.sale_date,
     )
 
-    if product:
-        # Conditional SQL update makes stock validation and decrement atomic, including
-        # when multiple sales arrive concurrently.
-        result = db.execute(
-            update(models.Product)
-            .where(
-                models.Product.id == product.id,
-                models.Product.quantity >= payload.quantity,
-            )
-            .values(quantity=models.Product.quantity - payload.quantity)
+    # Conditional SQL update makes stock validation and decrement atomic, including
+    # when multiple sales arrive concurrently.
+    result = db.execute(
+        update(models.Product)
+        .where(
+            models.Product.id == product.id,
+            models.Product.quantity >= payload.quantity,
         )
-        if not result.rowcount:
-            db.rollback()
-            raise HTTPException(status_code=400, detail="Недостаточно товара на складе")
+        .values(quantity=models.Product.quantity - payload.quantity)
+    )
+    if not result.rowcount:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Недостаточно товара на складе")
     db.add(sale)
     try:
         db.commit()
@@ -820,7 +893,7 @@ def create_bulk_inventory_sale(
         )
 
     for product_id in requested_quantities:
-        product = require_product_access(db, product_id, user)
+        product = require_sale_product(db, product_id, payload.sale_date, user)
         products[product_id] = product
 
     created_sales = []

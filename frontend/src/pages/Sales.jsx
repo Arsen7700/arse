@@ -2,19 +2,6 @@ import React, { useEffect, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 
-const REPORT_SALE_PRESETS = [
-  "SA",
-  "Услуги",
-  "Мой",
-  "Карты",
-  "Устройства",
-  "Saima",
-  "Телефоны",
-  "Аксессуары",
-  "Вместе дешевле",
-  "O!семья",
-];
-
 const REPORT_ROWS = [
   { label: "SA", plan: 30, metric: "quantity", aliases: ["sa", "sim-карта", "sim карта", "сим-карта", "сим карта", "сим-карты"] },
   { label: "Услуги", plan: 15000, metric: "revenue", aliases: ["услуги", "услуга"] },
@@ -82,17 +69,12 @@ export default function Sales() {
   const canEditDailySettings = ["specialist", "lead", "admin"].includes(user?.role);
   const canSelectReportStore = ["lead", "admin"].includes(user?.role);
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [stores, setStores] = useState([]);
   const [sales, setSales] = useState([]);
-  const [saleType, setSaleType] = useState("inventory");
   const [inventoryItems, setInventoryItems] = useState([
-    { product_id: "", quantity: 1, total_amount: "" },
+    { category_id: "", product_id: "", quantity: 1, total_amount: "" },
   ]);
-  const [manualName, setManualName] = useState("");
-  const [manualNameCustom, setManualNameCustom] = useState(false);
-  const [manualSalePrice, setManualSalePrice] = useState("");
-  const [manualSaleStoreId, setManualSaleStoreId] = useState("");
-  const [quantity, setQuantity] = useState(1);
   const [saleDate, setSaleDate] = useState(() => toLocalDateTime(new Date()));
   const [message, setMessage] = useState("");
   const [historyMessage, setHistoryMessage] = useState("");
@@ -116,9 +98,11 @@ export default function Sales() {
     send_time: "20:00",
     timezone: "Asia/Almaty",
   });
+  const saleMonth = saleDate.slice(0, 7);
 
   const loadProducts = async () => {
-    const p = await api.get("/products");
+    const [year, month] = saleMonth.split("-").map(Number);
+    const p = await api.get("/saleable-products", { params: { year, month } });
     setProducts(p.data);
   };
 
@@ -142,7 +126,20 @@ export default function Sales() {
 
   useEffect(() => {
     loadProducts();
-  }, []);
+    api.get("/categories").then((response) => setCategories(response.data)).catch(() => {});
+  }, [saleMonth]);
+
+  const saleCategories = [...new Map(products.map((product) => {
+    const key = product.category_id == null ? "uncategorized" : String(product.category_id);
+    const label = product.category_id == null
+      ? "Без категории"
+      : categories.find((category) => category.id === product.category_id)?.name || "Категория";
+    return [key, { value: key, label }];
+  })).values()];
+
+  const productsForCategory = (categoryId) => products.filter((product) =>
+    (product.category_id == null ? "uncategorized" : String(product.category_id)) === String(categoryId)
+  );
 
   useEffect(() => {
     if (canSelectReportStore) {
@@ -224,13 +221,8 @@ export default function Sales() {
       : (product?.sale_price || 0) * lineQuantity;
     return sum + lineTotal - (product?.purchase_price || 0) * lineQuantity;
   }, 0);
-  const salePrice = Number(manualSalePrice || 0);
-  const total = saleType === "inventory"
-    ? inventoryTotal
-    : salePrice * Number(quantity || 0);
-  const profit = saleType === "inventory"
-    ? inventoryProfit
-    : total;
+  const total = inventoryTotal;
+  const profit = inventoryProfit;
   const reportActuals = new Map(REPORT_ROWS.map((row) => [row.label, { quantity: 0, revenue: 0 }]));
   const reportAliases = new Map(
     REPORT_ROWS.flatMap((row) => row.aliases.map((alias) => [alias, row.label]))
@@ -368,33 +360,17 @@ export default function Sales() {
     setMessage("");
     try {
       const saleDateIso = new Date(saleDate).toISOString();
-      if (saleType === "inventory") {
-        const payload = {
-          sale_date: saleDateIso,
-          items: inventoryItems.map((line) => ({
-            product_id: Number(line.product_id),
-            quantity: Number(line.quantity),
-            total_amount: line.total_amount === "" ? undefined : Number(line.total_amount),
-          })),
-        };
-        const response = await api.post("/sales/bulk", payload);
-        setMessage(`Сохранено товаров в продаже: ${response.data.length}`);
-        setInventoryItems([{ product_id: "", quantity: 1, total_amount: "" }]);
-      } else {
-        const payload = {
-          quantity: Number(quantity),
-          sale_date: saleDateIso,
-        };
-        payload.product_name = manualName.trim();
-        payload.unit_sale_price = salePrice;
-        if (canSelectReportStore && manualSaleStoreId) payload.store_id = Number(manualSaleStoreId);
-        await api.post("/sales", payload);
-        setMessage("Продажа сохранена");
-        setQuantity(1);
-        setManualName("");
-        setManualNameCustom(false);
-        setManualSalePrice("");
-      }
+      const payload = {
+        sale_date: saleDateIso,
+        items: inventoryItems.map((line) => ({
+          product_id: Number(line.product_id),
+          quantity: Number(line.quantity),
+          total_amount: line.total_amount === "" ? undefined : Number(line.total_amount),
+        })),
+      };
+      const response = await api.post("/sales/bulk", payload);
+      setMessage(`Продажа сохранена. Товарных позиций: ${response.data.length}`);
+      setInventoryItems([{ category_id: "", product_id: "", quantity: 1, total_amount: "" }]);
       await loadProducts();
       if (historyOpen) await loadHistory();
     } catch (err) {
@@ -432,7 +408,7 @@ export default function Sales() {
   };
 
   const deleteSale = async (saleId) => {
-    if (!window.confirm("Удалить эту продажу? Для продажи со склада остаток вернётся на склад.")) {
+    if (!window.confirm("Удалить эту продажу? Остаток товара вернётся на склад.")) {
       return;
     }
     try {
@@ -465,42 +441,37 @@ export default function Sales() {
 
       {!readOnly && <div className="card">
         <form className="form-grid" onSubmit={submit}>
-          <div className="row">
-            <button
-              type="button"
-              className={saleType === "inventory" ? "primary" : ""}
-              onClick={() => setSaleType("inventory")}
-            >
-              Со склада
-            </button>
-            <button
-              type="button"
-              className={saleType === "manual" ? "primary" : ""}
-              onClick={() => {
-                setSaleType("manual");
-              }}
-            >
-              Без добавления товара
-            </button>
-          </div>
-
-          {saleType === "inventory" ? (
-            <div className="inventory-sale-lines">
+          <div className="inventory-sale-lines">
+            {!products.length && <div className="notice">На выбранный месяц товары с план-фактом не назначены. Попросите ведущего или администратора назначить план-факт.</div>}
               {inventoryItems.map((line, index) => (
                 <div className="inventory-sale-line" key={index}>
+                  <label>
+                    Категория
+                    <select
+                      value={line.category_id}
+                      onChange={(event) => setInventoryItems(inventoryItems.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, category_id: event.target.value, product_id: "" } : item
+                      ))}
+                      required
+                    >
+                      <option value="">Выберите категорию</option>
+                      {saleCategories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
+                    </select>
+                  </label>
                   <label>
                     Товар {index + 1}
                     <select
                       value={line.product_id}
+                      disabled={!line.category_id}
                       onChange={(event) => setInventoryItems(inventoryItems.map((item, itemIndex) =>
                         itemIndex === index ? { ...item, product_id: event.target.value } : item
                       ))}
                       required
                     >
-                      <option value="">Выберите товар со склада</option>
-                      {products.map((product) => (
+                      <option value="">{line.category_id ? "Выберите товар с план-фактом" : "Сначала выберите категорию"}</option>
+                      {productsForCategory(line.category_id).map((product) => (
                         <option key={product.id} value={product.id}>
-                          {product.name} — осталось {product.quantity}
+                          {product.name} — остаток: {product.quantity}
                         </option>
                       ))}
                     </select>
@@ -545,61 +516,12 @@ export default function Sales() {
                 type="button"
                 onClick={() => setInventoryItems([
                   ...inventoryItems,
-                  { product_id: "", quantity: 1, total_amount: "" },
+                  { category_id: "", product_id: "", quantity: 1, total_amount: "" },
                 ])}
               >
                 + Добавить товар
               </button>
-            </div>
-          ) : (
-            <>
-              <select
-                value={manualNameCustom ? "__custom__" : manualName}
-                onChange={(event) => {
-                  const isCustom = event.target.value === "__custom__";
-                  setManualNameCustom(isCustom);
-                  setManualName(isCustom ? "" : event.target.value);
-                }}
-                required
-              >
-                <option value="">Выберите товар или услугу</option>
-                {REPORT_SALE_PRESETS.map((name) => <option key={name} value={name}>{name}</option>)}
-                <option value="__custom__">Другое название…</option>
-              </select>
-              {manualNameCustom && (
-                <input
-                  placeholder="Введите название товара или услуги"
-                  value={manualName}
-                  onChange={(event) => setManualName(event.target.value)}
-                  required
-                />
-              )}
-      {canSelectReportStore && (
-                <select required={isLead} value={manualSaleStoreId} onChange={(event) => setManualSaleStoreId(event.target.value)}>
-                  <option value="">{isLead ? "Выберите лавочку" : "Основная лавочка"}</option>
-                  {stores.filter((store) => store.is_active).map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
-                </select>
-              )}
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Цена продажи за единицу"
-                value={manualSalePrice}
-                onChange={(e) => setManualSalePrice(e.target.value)}
-                required
-              />
-            </>
-          )}
-
-          {saleType === "manual" && (
-            <input
-              type="number"
-              min="1"
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-            />
-          )}
+          </div>
 
           <input
             type="datetime-local"
@@ -612,7 +534,7 @@ export default function Sales() {
             <div>Прибыль: {profit.toLocaleString("ru-RU")} сом</div>
           </div>
 
-          <button className="primary" type="submit">
+          <button className="primary" type="submit" disabled={!products.length}>
             Сохранить продажу
           </button>
         </form>

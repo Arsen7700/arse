@@ -129,22 +129,54 @@ def test_production_admin_can_invite_telegram_specialist(client, monkeypatch):
     assert client.get("/products", headers=uninvited_headers).status_code == 403
 
 
-def create_product(client, *, quantity=5, purchase_price=10, sale_price=25):
-    response = client.post(
-        "/products",
+def assign_product_plan(client, product, *, telegram_id=None, year=None, month=None):
+    if telegram_id is None:
+        telegram_id = 8_100_000 + product["id"]
+        created = client.post(
+            "/team/staff",
+            json={
+                "telegram_id": telegram_id,
+                "display_name": f"Планировщик {telegram_id}",
+                "role": "specialist",
+                "store_id": product["store_id"],
+            },
+        )
+        assert created.status_code == 200, created.text
+    now = datetime.now()
+    response = client.put(
+        "/team/staff-goals",
         json={
-            "name": "Тестовый товар",
-            "purchase_price": purchase_price,
-            "sale_price": sale_price,
-            "quantity": quantity,
+            "telegram_id": telegram_id,
+            "product_id": product["id"],
+            "year": year or now.year,
+            "month": month or now.month,
+            "revenue_goal": 1000,
+            "quantity_goal": 10,
         },
     )
     assert response.status_code == 200, response.text
-    return response.json()
+
+
+def create_product(client, *, quantity=5, purchase_price=10, sale_price=25, name="Тестовый товар", store_id=None, plan=True):
+    response = client.post(
+        "/products",
+        json={
+            "name": name,
+            "purchase_price": purchase_price,
+            "sale_price": sale_price,
+            "quantity": quantity,
+            "store_id": store_id,
+        },
+    )
+    assert response.status_code == 200, response.text
+    product = response.json()
+    if plan:
+        assign_product_plan(client, product)
+    return product
 
 
 def test_shop_scoping_specialist_permissions_and_lead_reports(client):
-    first_product = create_product(client)
+    first_product = create_product(client, plan=False)
     first_store_id = first_product["store_id"]
     second_store = client.post("/admin/stores", json={"name": "Вторая лавочка"})
     assert second_store.status_code == 200, second_store.text
@@ -171,6 +203,8 @@ def test_shop_scoping_specialist_permissions_and_lead_reports(client):
             },
         )
         assert created_account.status_code == 200, created_account.text
+    assign_product_plan(client, first_product, telegram_id=10101)
+    assign_product_plan(client, second_product, telegram_id=30303)
 
     def use_user(user_id, role, store_id=None):
         app.dependency_overrides[current_user] = lambda: CurrentUser(
@@ -326,10 +360,16 @@ def test_lead_can_assign_specialist_and_cashier_roles(client):
 
 def test_cashier_can_register_and_edit_only_own_store_sales(client):
     store = client.post("/admin/stores", json={"name": "Кассовая лавочка"}).json()
+    account = client.post(
+        "/team/staff",
+        json={"telegram_id": 81818, "display_name": "Кассир", "role": "cashier", "store_id": store["id"]},
+    )
+    assert account.status_code == 200, account.text
     product = client.post(
         "/products",
         json={"name": "Товар кассы", "sale_price": 15, "quantity": 4, "store_id": store["id"]},
     ).json()
+    assign_product_plan(client, product, telegram_id=81818)
     app.dependency_overrides[current_user] = lambda: CurrentUser(81818, "Кассир", "cashier", store["id"])
     try:
         sale = client.post(
@@ -478,6 +518,7 @@ def test_bulk_inventory_sale_saves_multiple_items_and_decrements_stock(client):
     )
     assert second_response.status_code == 200, second_response.text
     second = second_response.json()
+    assign_product_plan(client, second)
 
     response = client.post(
         "/sales/bulk",
@@ -504,6 +545,7 @@ def test_bulk_inventory_sale_rolls_back_all_items_if_any_stock_is_insufficient(c
         json={"name": "Второй товар", "sale_price": 12, "quantity": 1},
     )
     second = second_response.json()
+    assign_product_plan(client, second)
 
     response = client.post(
         "/sales/bulk",
@@ -522,8 +564,7 @@ def test_bulk_inventory_sale_rolls_back_all_items_if_any_stock_is_insufficient(c
     assert client.get("/sales").json() == []
 
 
-def test_manual_sale_does_not_require_catalog_product_or_change_stock(client):
-    create_product(client, quantity=5)
+def test_manual_sale_without_catalog_product_is_rejected(client):
     response = client.post(
         "/sales",
         json={
@@ -533,13 +574,8 @@ def test_manual_sale_does_not_require_catalog_product_or_change_stock(client):
             "sale_date": datetime.now().isoformat(),
         },
     )
-    assert response.status_code == 200, response.text
-    sale = response.json()
-    assert sale["product_id"] is None
-    assert sale["product_name"] == "Разовая услуга"
-    assert sale["total_amount"] == 200
-    assert sale["profit"] == 200
-    assert client.get("/products").json()[0]["quantity"] == 5
+    assert response.status_code == 400
+    assert "только по товару из каталога" in response.json()["detail"]
 
 
 def test_manual_sale_requires_name_and_sale_price(client):
@@ -550,7 +586,7 @@ def test_manual_sale_requires_name_and_sale_price(client):
     assert response.status_code == 422
 
 
-def test_manual_sale_can_be_edited_and_deleted(client):
+def test_manual_sale_can_no_longer_be_created(client):
     created = client.post(
         "/sales",
         json={
@@ -560,19 +596,7 @@ def test_manual_sale_can_be_edited_and_deleted(client):
             "sale_date": datetime.now().isoformat(),
         },
     )
-    assert created.status_code == 200, created.text
-    sale_id = created.json()["id"]
-
-    updated = client.put(
-        f"/sales/{sale_id}",
-        json={"product_name": "Исправленная продажа", "quantity": 3, "unit_sale_price": 50},
-    )
-    assert updated.status_code == 200, updated.text
-    assert updated.json()["product_name"] == "Исправленная продажа"
-    assert updated.json()["total_amount"] == 150
-    assert updated.json()["profit"] == 150
-
-    assert client.delete(f"/sales/{sale_id}").status_code == 200
+    assert created.status_code == 400
     assert client.get("/sales").json() == []
 
 
@@ -729,6 +753,8 @@ def test_lead_assigns_personal_product_plan_and_staff_only_sees_own(client):
         own = client.get("/my-goals/2026/9")
         assert own.status_code == 200, own.text
         assert own.json() == [assigned.json()]
+        saleable = client.get("/saleable-products", params={"year": 2026, "month": 9})
+        assert [row["id"] for row in saleable.json()] == [product["id"]]
         assert client.get("/team/staff-goals/51002/2026/9").status_code == 403
         assert client.put(
             "/team/staff-goals",
@@ -749,6 +775,12 @@ def test_lead_assigns_personal_product_plan_and_staff_only_sees_own(client):
         other = client.get("/my-goals/2026/9")
         assert other.status_code == 200, other.text
         assert other.json() == []
+        assert client.get("/saleable-products", params={"year": 2026, "month": 9}).json() == []
+        denied_sale = client.post(
+            "/sales",
+            json={"product_id": product["id"], "quantity": 1, "sale_date": "2026-09-15T12:00:00"},
+        )
+        assert denied_sale.status_code == 400
     finally:
         app.dependency_overrides.pop(current_user, None)
 
@@ -819,19 +851,25 @@ def test_staff_can_send_only_their_own_sales(role, client, monkeypatch):
     delivered = []
     monkeypatch.setattr(main_module, "send_telegram_message", delivered.append)
     store = client.post("/admin/stores", json={"name": "Личная лавочка"}).json()
+    product = create_product(
+        client, name="Моя продажа", sale_price=42, quantity=10, store_id=store["id"]
+    )
+    for telegram_id, display_name in ((73737, "Сотрудник"), (74747, "Другой сотрудник")):
+        account = client.post(
+            "/team/staff",
+            json={"telegram_id": telegram_id, "display_name": display_name, "role": role, "store_id": store["id"]},
+        )
+        assert account.status_code == 200, account.text
+        assign_product_plan(client, product, telegram_id=telegram_id, year=2026, month=9)
 
-    for telegram_id, display_name, product_name in (
-        (73737, "Сотрудник", "Моя продажа"),
-        (74747, "Другой сотрудник", "Чужая продажа"),
-    ):
+    for telegram_id, display_name in ((73737, "Сотрудник"), (74747, "Другой сотрудник")):
         app.dependency_overrides[current_user] = lambda telegram_id=telegram_id, display_name=display_name: CurrentUser(
             telegram_id, display_name, role, store["id"]
         )
         created = client.post(
             "/sales",
             json={
-                "product_name": product_name,
-                "unit_sale_price": 42,
+                "product_id": product["id"],
                 "quantity": 2,
                 "sale_date": "2026-09-23T10:00:00",
             },
@@ -858,23 +896,22 @@ def test_staff_can_send_only_their_own_sales(role, client, monkeypatch):
 
 def test_monthly_telegram_report_uses_plan_fact_and_zeroes(client, monkeypatch):
     monkeypatch.setenv("TELEGRAM_ADMIN_KEY", "test-admin-secret")
-    # Report-only sales need no catalog product. Service facts use sold amount.
+    service_product = create_product(client, name="Услуги", sale_price=16710, quantity=10)
     service = client.post(
         "/sales",
         json={
-            "product_name": "Услуги",
+            "product_id": service_product["id"],
             "quantity": 1,
-            "unit_sale_price": 16710,
             "sale_date": "2026-09-15T12:00:00",
         },
     )
     assert service.status_code == 200, service.text
+    sim_product = create_product(client, name="SIM-карта", sale_price=0, purchase_price=0, quantity=10)
     card = client.post(
         "/sales",
         json={
-            "product_name": "SIM-карта",
+            "product_id": sim_product["id"],
             "quantity": 2,
-            "unit_sale_price": 0,
             "sale_date": "2026-09-15T12:30:00",
         },
     )
