@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import extract, func, update
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from .database import Base, engine, get_db, SessionLocal
@@ -136,9 +136,9 @@ async def require_telegram_mini_app_user(request: Request, call_next):
                     content={"detail": "Ваш Telegram-аккаунт ещё не добавлен администратором"},
                 )
             else:
-                if account.role not in {"specialist", "lead", "admin"}:
+                if account.role not in {"specialist", "cashier", "lead", "admin"}:
                     return JSONResponse(status_code=403, content={"detail": "Для учётной записи не настроена роль"})
-                if account.role == "specialist":
+                if account.role in {"specialist", "cashier"}:
                     assigned_store = auth_db.get(models.Store, account.store_id) if account.store_id else None
                     if assigned_store is None or not assigned_store.is_active:
                         return JSONResponse(status_code=403, content={"detail": "Ваша лавочка не назначена или отключена"})
@@ -194,16 +194,16 @@ def require_product_access(db: Session, product_id: int, user: CurrentUser) -> m
     product = db.get(models.Product, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Товар не найден")
-    if user.role == "specialist" and product.store_id != user.store_id:
+    if user.role in {"specialist", "cashier"} and product.store_id != user.store_id:
         raise HTTPException(status_code=404, detail="Товар не найден")
     return product
 
 
 def require_sale_access(db: Session, sale_id: int, user: CurrentUser) -> models.Sale:
     sale = db.get(models.Sale, sale_id)
-    if not sale or (user.role == "specialist" and sale.store_id != user.store_id):
+    if not sale or (user.role in {"specialist", "cashier"} and sale.store_id != user.store_id):
         raise HTTPException(status_code=404, detail="Продажа не найдена")
-    if user.role == "specialist" and sale.created_by_telegram_id != user.telegram_id:
+    if user.role in {"specialist", "cashier"} and sale.created_by_telegram_id != user.telegram_id:
         raise HTTPException(status_code=403, detail="Можно изменять только свои продажи")
     return sale
 
@@ -225,7 +225,7 @@ def list_stores(
     user: CurrentUser = Depends(current_user),
 ):
     query = db.query(models.Store)
-    if user.role == "specialist":
+    if user.role in {"specialist", "cashier"}:
         if user.store_id is None:
             return []
         query = query.filter(models.Store.id == user.store_id)
@@ -303,8 +303,10 @@ def create_staff_account(
 ):
     if db.get(models.StaffAccount, payload.telegram_id):
         raise HTTPException(status_code=409, detail="Этот Telegram ID уже добавлен")
-    if payload.role == "specialist" and payload.store_id is None:
-        raise HTTPException(status_code=422, detail="Специалисту нужно назначить лавочку")
+    if not payload.display_name.strip():
+        raise HTTPException(status_code=422, detail="Укажите имя сотрудника")
+    if payload.role in {"specialist", "cashier"} and payload.store_id is None:
+        raise HTTPException(status_code=422, detail="Специалисту или кассиру нужно назначить лавочку")
     store = get_store(db, payload.store_id) if payload.store_id is not None else None
     account = models.StaffAccount(**payload.model_dump())
     db.add(account)
@@ -339,8 +341,8 @@ def update_staff_account(
         )
     role = data.get("role", account.role)
     store_id = data.get("store_id", account.store_id)
-    if role == "specialist" and store_id is None:
-        raise HTTPException(status_code=422, detail="Специалисту нужно назначить лавочку")
+    if role in {"specialist", "cashier"} and store_id is None:
+        raise HTTPException(status_code=422, detail="Специалисту или кассиру нужно назначить лавочку")
     store = get_store(db, store_id) if store_id is not None else None
     for key, value in data.items():
         setattr(account, key, value)
@@ -353,6 +355,137 @@ def update_staff_account(
         "store_name": store.name if store else None,
         "is_active": account.is_active,
     }
+
+
+@app.get("/team/staff", response_model=list[schemas.StaffAccountOut])
+def list_team_staff(
+    db: Session = Depends(get_db),
+    _user: CurrentUser = Depends(require_roles("lead")),
+):
+    rows = db.query(models.StaffAccount, models.Store.name).outerjoin(
+        models.Store, models.Store.id == models.StaffAccount.store_id
+    ).filter(models.StaffAccount.role.in_(("specialist", "cashier"))).order_by(
+        models.StaffAccount.display_name
+    ).all()
+    return [
+        {
+            "telegram_id": account.telegram_id,
+            "display_name": account.display_name,
+            "role": account.role,
+            "store_id": account.store_id,
+            "store_name": store_name,
+            "is_active": account.is_active,
+        }
+        for account, store_name in rows
+    ]
+
+
+@app.post("/team/staff", response_model=schemas.StaffAccountOut)
+def create_team_staff(
+    payload: schemas.TeamStaffCreate,
+    db: Session = Depends(get_db),
+    _user: CurrentUser = Depends(require_roles("lead")),
+):
+    if db.get(models.StaffAccount, payload.telegram_id):
+        raise HTTPException(status_code=409, detail="Этот Telegram ID уже добавлен")
+    if not payload.display_name.strip():
+        raise HTTPException(status_code=422, detail="Укажите имя сотрудника")
+    store = get_store(db, payload.store_id)
+    account = models.StaffAccount(
+        telegram_id=payload.telegram_id,
+        display_name=payload.display_name.strip(),
+        role=payload.role,
+        store_id=store.id,
+        is_active=True,
+    )
+    db.add(account)
+    db.commit()
+    return {
+        "telegram_id": account.telegram_id,
+        "display_name": account.display_name,
+        "role": account.role,
+        "store_id": account.store_id,
+        "store_name": store.name,
+        "is_active": account.is_active,
+    }
+
+
+@app.put("/team/staff/{telegram_id}", response_model=schemas.StaffAccountOut)
+def update_team_staff_role(
+    telegram_id: int,
+    payload: schemas.TeamStaffRoleUpdate,
+    db: Session = Depends(get_db),
+    _user: CurrentUser = Depends(require_roles("lead")),
+):
+    account = db.get(models.StaffAccount, telegram_id)
+    if not account or account.role not in {"specialist", "cashier"}:
+        raise HTTPException(status_code=404, detail="Сотрудник не найден")
+    store = get_store(db, payload.store_id)
+    account.role = payload.role
+    account.store_id = store.id
+    db.commit()
+    return {
+        "telegram_id": account.telegram_id,
+        "display_name": account.display_name,
+        "role": account.role,
+        "store_id": account.store_id,
+        "store_name": store.name,
+        "is_active": account.is_active,
+    }
+
+
+def daily_report_settings_data(settings, report_date: date, store_id: int):
+    return {
+        "report_date": report_date,
+        "store_id": store_id,
+        "cash_limit": settings.cash_limit if settings else "60к",
+        "cash_remaining": settings.cash_remaining if settings else "80к",
+        "collection_status": settings.collection_status if settings else "нет",
+    }
+
+
+def resolve_report_store(db: Session, user: CurrentUser, requested_store_id: int | None):
+    store_id = assigned_store_id(user, requested_store_id)
+    if store_id is None:
+        raise HTTPException(status_code=422, detail="Выберите лавочку для отчёта")
+    return get_store(db, store_id).id
+
+
+@app.get("/reports/daily-settings", response_model=schemas.DailyReportSettingsOut)
+def get_daily_report_settings(
+    report_date: date = Query(...),
+    store_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_roles("specialist", "lead")),
+):
+    selected_store_id = resolve_report_store(db, user, store_id)
+    settings = db.query(models.DailyReportSettings).filter_by(
+        store_id=selected_store_id, report_date=report_date
+    ).first()
+    return daily_report_settings_data(settings, report_date, selected_store_id)
+
+
+@app.put("/reports/daily-settings", response_model=schemas.DailyReportSettingsOut)
+def update_daily_report_settings(
+    payload: schemas.DailyReportSettingsUpdate,
+    db: Session = Depends(get_db),
+    user: CurrentUser = Depends(require_roles("specialist", "lead")),
+):
+    selected_store_id = resolve_report_store(db, user, payload.store_id)
+    settings = db.query(models.DailyReportSettings).filter_by(
+        store_id=selected_store_id, report_date=payload.report_date
+    ).first()
+    if settings is None:
+        settings = models.DailyReportSettings(
+            store_id=selected_store_id, report_date=payload.report_date
+        )
+        db.add(settings)
+    settings.cash_limit = payload.cash_limit.strip()
+    settings.cash_remaining = payload.cash_remaining.strip()
+    settings.collection_status = payload.collection_status.strip()
+    db.commit()
+    db.refresh(settings)
+    return daily_report_settings_data(settings, payload.report_date, selected_store_id)
 
 
 @app.get("/reports/staff")
@@ -398,7 +531,7 @@ def staff_sales_report(
 
     attributed_ids = [key for key in grouped if key is not None]
     accounts_query = db.query(models.StaffAccount).filter(
-        (models.StaffAccount.role == "specialist")
+        (models.StaffAccount.role.in_(("specialist", "cashier")))
         | (models.StaffAccount.telegram_id.in_(attributed_ids) if attributed_ids else False)
     )
     if store_id is not None:
@@ -457,7 +590,7 @@ def root():
 def create_category(
     payload: schemas.CategoryCreate,
     db: Session = Depends(get_db),
-    _user: CurrentUser = Depends(require_roles("specialist")),
+    _user: CurrentUser = Depends(require_roles("specialist", "lead")),
 ):
     exists = db.query(models.Category).filter(
         func.lower(models.Category.name) == payload.name.strip().lower()
@@ -478,7 +611,7 @@ def list_categories(db: Session = Depends(get_db), _user: CurrentUser = Depends(
 def create_product(
     payload: schemas.ProductCreate,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_roles("specialist")),
+    user: CurrentUser = Depends(require_roles("specialist", "lead")),
 ):
     selected_store_id = assigned_store_id(user, payload.store_id)
     store = get_store(db, selected_store_id) if selected_store_id is not None else ensure_default_store(db)
@@ -488,7 +621,7 @@ def create_product(
             raise HTTPException(status_code=404, detail="Категория не найдена")
 
     values = payload.model_dump(exclude={"store_id"})
-    if user.role == "specialist":
+    if user.role != "admin":
         values["quantity"] = 0
     product = models.Product(**values, store_id=store.id)
     db.add(product)
@@ -516,12 +649,12 @@ def update_product(
     product_id: int,
     payload: schemas.ProductUpdate,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_roles("specialist")),
+    user: CurrentUser = Depends(require_roles("specialist", "lead")),
 ):
     product = require_product_access(db, product_id, user)
 
     data = payload.model_dump(exclude_unset=True)
-    if user.role == "specialist":
+    if user.role != "admin":
         data.pop("quantity", None)
     if "category_id" in data and data["category_id"] is not None:
         if not db.get(models.Category, data["category_id"]):
@@ -538,7 +671,7 @@ def update_product(
 def delete_product(
     product_id: int,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_roles("specialist")),
+    user: CurrentUser = Depends(require_roles("specialist", "lead")),
 ):
     product = require_product_access(db, product_id, user)
 
@@ -583,7 +716,7 @@ def change_stock(
 def create_sale(
     payload: schemas.SaleCreate,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_roles("specialist")),
+    user: CurrentUser = Depends(require_roles("specialist", "cashier", "lead")),
 ):
     product = None
     if payload.product_id is not None:
@@ -594,6 +727,8 @@ def create_sale(
         sale_price = product.sale_price
         purchase_price = product.purchase_price
     else:
+        if user.role == "lead" and payload.store_id is None:
+            raise HTTPException(status_code=422, detail="Для продажи без товара выберите лавочку")
         sale_store_id = assigned_store_id(user, payload.store_id)
         store = get_store(db, sale_store_id) if sale_store_id is not None else ensure_default_store(db)
         sale_store_id = store.id
@@ -661,7 +796,7 @@ def create_sale(
 def create_bulk_inventory_sale(
     payload: schemas.BulkInventorySaleCreate,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_roles("specialist")),
+    user: CurrentUser = Depends(require_roles("specialist", "cashier", "lead")),
 ):
     products = {}
     requested_quantities = {}
@@ -744,7 +879,7 @@ def update_sale(
     sale_id: int,
     payload: schemas.SaleUpdate,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_roles("specialist")),
+    user: CurrentUser = Depends(require_roles("specialist", "cashier", "lead")),
 ):
     sale = require_sale_access(db, sale_id, user)
 
@@ -805,7 +940,7 @@ def update_sale(
 def delete_sale(
     sale_id: int,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_roles("specialist")),
+    user: CurrentUser = Depends(require_roles("specialist", "cashier", "lead")),
 ):
     sale = require_sale_access(db, sale_id, user)
 
@@ -832,7 +967,7 @@ def list_sales(
     user: CurrentUser = Depends(current_user),
 ):
     q = apply_store_scope(db.query(models.Sale), models.Sale, user, store_id)
-    if user.role == "specialist":
+    if user.role in {"specialist", "cashier"}:
         q = q.filter(models.Sale.created_by_telegram_id == user.telegram_id)
     if start:
         q = q.filter(models.Sale.sale_date >= start)
@@ -972,10 +1107,12 @@ def send_telegram_report(
     try:
         if payload.period == "month":
             report = build_monthly_report(
-                db, payload.report_year, payload.report_month, timezone_name
+                db, payload.report_year, payload.report_month, timezone_name, payload.store_id
             )
         else:
-            report = build_daily_report(db, payload.report_date, timezone_name)
+            report = build_daily_report(
+                db, payload.report_date, timezone_name, payload.store_id
+            )
         send_telegram_message(report)
     except (RuntimeError, ValueError) as error:
         raise HTTPException(status_code=502, detail=str(error))
@@ -1067,7 +1204,7 @@ def dashboard(
         models.Sale.sale_date >= start,
         models.Sale.sale_date < end,
     )
-    if user.role == "specialist":
+    if user.role in {"specialist", "cashier"}:
         sales_query = sales_query.filter(models.Sale.created_by_telegram_id == user.telegram_id)
     sales = sales_query.all()
 
@@ -1157,7 +1294,7 @@ def monthly_report(
     user: CurrentUser = Depends(current_user),
 ):
     report_query = apply_store_scope(db.query(models.Sale), models.Sale, user, store_id)
-    if user.role == "specialist":
+    if user.role in {"specialist", "cashier"}:
         report_query = report_query.filter(models.Sale.created_by_telegram_id == user.telegram_id)
     scoped_sale_ids = report_query.with_entities(models.Sale.id).subquery()
     rows = db.query(

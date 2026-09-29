@@ -73,8 +73,11 @@ const dateAtTimezoneUtc = (dateValue, timezone) => {
 
 export default function Sales() {
   const user = useAuth();
-  const readOnly = user?.role === "lead";
+  const readOnly = false;
+  const isLead = user?.role === "lead";
   const isAdmin = user?.role === "admin";
+  const canEditDailySettings = ["specialist", "lead", "admin"].includes(user?.role);
+  const canSelectReportStore = ["lead", "admin"].includes(user?.role);
   const [products, setProducts] = useState([]);
   const [stores, setStores] = useState([]);
   const [sales, setSales] = useState([]);
@@ -103,6 +106,8 @@ export default function Sales() {
   const [reportMessage, setReportMessage] = useState("");
   const [reportSending, setReportSending] = useState(false);
   const [telegramAdminKey, setTelegramAdminKey] = useState("");
+  const [reportStoreId, setReportStoreId] = useState("");
+  const [dailySettings, setDailySettings] = useState({ cash_limit: "60к", cash_remaining: "80к", collection_status: "нет" });
   const [telegramSchedule, setTelegramSchedule] = useState({
     enabled: false,
     send_time: "20:00",
@@ -137,10 +142,13 @@ export default function Sales() {
   }, []);
 
   useEffect(() => {
-    if (isAdmin) {
-      api.get("/stores").then((response) => setStores(response.data)).catch(() => {});
+    if (canSelectReportStore) {
+      api.get("/stores").then((response) => {
+        setStores(response.data);
+        setReportStoreId((current) => current || String(response.data[0]?.id || ""));
+      }).catch(() => {});
     }
-  }, [isAdmin]);
+  }, [canSelectReportStore]);
 
   useEffect(() => {
     if (historyOpen) loadHistory();
@@ -169,7 +177,7 @@ export default function Sales() {
       setReportMessage("");
       try {
         const response = await api.get("/sales", {
-          params: { start: start.toISOString(), end: end.toISOString() },
+          params: { start: start.toISOString(), end: end.toISOString(), store_id: canSelectReportStore ? reportStoreId || undefined : undefined },
         });
         setReportSales(response.data);
       } catch (err) {
@@ -180,7 +188,15 @@ export default function Sales() {
       }
     };
     loadReport();
-  }, [reportOpen, reportPeriod, reportDate, reportMonth, telegramSchedule.timezone]);
+  }, [reportOpen, reportPeriod, reportDate, reportMonth, reportStoreId, canSelectReportStore, telegramSchedule.timezone]);
+
+  useEffect(() => {
+    if (!reportOpen || reportPeriod !== "day" || !reportDate || !canEditDailySettings) return;
+    api.get("/reports/daily-settings", {
+      params: { report_date: reportDate, store_id: canSelectReportStore ? reportStoreId || undefined : undefined },
+    }).then((response) => setDailySettings(response.data))
+      .catch((err) => setReportMessage(err.response?.data?.detail || "Не удалось загрузить данные кассы"));
+  }, [reportOpen, reportPeriod, reportDate, reportStoreId, canEditDailySettings, canSelectReportStore]);
 
   useEffect(() => {
     if (!reportOpen || !isAdmin) return;
@@ -239,11 +255,26 @@ export default function Sales() {
       if (row.metric === "bundle") return `${row.label} ${actual.quantity}`;
       return `${row.label}: ${row.plan}/ ${actual.quantity}`;
     }),
-    "Лимит Дс 60к",
-    "Остаток ЛС: 80к",
-    "Инкассация: нет",
+    `Лимит Дс ${reportPeriod === "day" ? dailySettings.cash_limit : "60к"}`,
+    `Остаток ЛС: ${reportPeriod === "day" ? dailySettings.cash_remaining : "80к"}`,
+    `Инкассация: ${reportPeriod === "day" ? dailySettings.collection_status : "нет"}`,
     "Отказы со стороны банка:0 2",
   ].join("\n");
+
+  const saveDailySettings = async () => {
+    if (!reportDate) return;
+    try {
+      const response = await api.put("/reports/daily-settings", {
+        ...dailySettings,
+        report_date: reportDate,
+        ...(canSelectReportStore && reportStoreId ? { store_id: Number(reportStoreId) } : {}),
+      });
+      setDailySettings(response.data);
+      setReportMessage("Данные кассы сохранены для выбранной даты и лавочки.");
+    } catch (err) {
+      setReportMessage(err.response?.data?.detail || "Не удалось сохранить данные кассы");
+    }
+  };
 
   const copyReport = async () => {
     try {
@@ -271,11 +302,12 @@ export default function Sales() {
     setReportMessage("");
     try {
       const reportPayload = reportPeriod === "day"
-        ? { period: "day", report_date: reportDate }
+        ? { period: "day", report_date: reportDate, ...(reportStoreId ? { store_id: Number(reportStoreId) } : {}) }
         : {
           period: "month",
           report_year: Number(reportMonth.slice(0, 4)),
           report_month: Number(reportMonth.slice(5, 7)),
+          ...(reportStoreId ? { store_id: Number(reportStoreId) } : {}),
         };
       const response = await api.post(
         "/telegram/send-report",
@@ -334,7 +366,7 @@ export default function Sales() {
         };
         payload.product_name = manualName.trim();
         payload.unit_sale_price = salePrice;
-        if (isAdmin && manualSaleStoreId) payload.store_id = Number(manualSaleStoreId);
+        if (canSelectReportStore && manualSaleStoreId) payload.store_id = Number(manualSaleStoreId);
         await api.post("/sales", payload);
         setMessage("Продажа сохранена");
         setQuantity(1);
@@ -398,7 +430,7 @@ export default function Sales() {
       <div className="page-header">
         <div>
           <h1>Продажи</h1>
-          <p className="muted">{readOnly ? "Просмотр продаж сотрудников" : "Регистрация ваших продаж"}</p>
+          <p className="muted">{isLead ? "Регистрация и редактирование продаж по лавочкам" : "Регистрация ваших продаж"}</p>
         </div>
         <div className="row sales-page-actions">
           <button type="button" onClick={() => setHistoryOpen(true)}>
@@ -521,9 +553,9 @@ export default function Sales() {
                   required
                 />
               )}
-              {isAdmin && (
-                <select value={manualSaleStoreId} onChange={(event) => setManualSaleStoreId(event.target.value)}>
-                  <option value="">Основная лавочка</option>
+      {canSelectReportStore && (
+                <select required={isLead} value={manualSaleStoreId} onChange={(event) => setManualSaleStoreId(event.target.value)}>
+                  <option value="">{isLead ? "Выберите лавочку" : "Основная лавочка"}</option>
                   {stores.filter((store) => store.is_active).map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
                 </select>
               )}
@@ -653,13 +685,13 @@ export default function Sales() {
                     <th>Кол-во</th>
                     <th>Сумма</th>
                     <th>Прибыль</th>
-                    {(readOnly || isAdmin) && <><th>Сотрудник</th><th>Лавочка</th></>}
-                    {!readOnly && <th>Действия</th>}
+                    {(isLead || isAdmin) && <><th>Сотрудник</th><th>Лавочка</th></>}
+                    <th>Действия</th>
                   </tr>
                 </thead>
                 <tbody>
                   {historyLoading ? (
-                    <tr><td colSpan={readOnly ? 7 : isAdmin ? 8 : 6}>Загрузка истории...</td></tr>
+                    <tr><td colSpan={isLead || isAdmin ? 8 : 6}>Загрузка истории...</td></tr>
                   ) : sales.length ? (
                     sales.map((sale) => (
                       <tr key={sale.id}>
@@ -668,15 +700,15 @@ export default function Sales() {
                         <td>{sale.quantity}</td>
                         <td>{sale.total_amount} сом</td>
                         <td>{sale.profit} сом</td>
-                        {(readOnly || isAdmin) && <><td>{sale.seller_name || "Не указан"}</td><td>{sale.store_name || "—"}</td></>}
-                        {!readOnly && <td className="actions">
+        {(isLead || isAdmin) && <><td>{sale.seller_name || "Не указан"}</td><td>{sale.store_name || "—"}</td></>}
+                        <td className="actions">
                           <button type="button" onClick={() => beginEdit(sale)}>Изменить</button>
                           <button type="button" className="danger" onClick={() => deleteSale(sale.id)}>Удалить</button>
-                        </td>}
+                        </td>
                       </tr>
                     ))
                   ) : (
-                    <tr><td colSpan={readOnly ? 7 : isAdmin ? 8 : 6}>За выбранный день продаж нет</td></tr>
+                    <tr><td colSpan={isLead || isAdmin ? 8 : 6}>За выбранный день продаж нет</td></tr>
                   )}
                 </tbody>
               </table>
@@ -727,6 +759,25 @@ export default function Sales() {
                   onChange={(event) => setReportMonth(event.target.value)}
                 />
               </label>
+            )}
+
+            {canSelectReportStore && (
+              <label className="report-date-label">
+                Лавочка отчёта
+                <select value={reportStoreId} onChange={(event) => setReportStoreId(event.target.value)}>
+                  {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
+                </select>
+              </label>
+            )}
+
+            {canEditDailySettings && reportPeriod === "day" && (
+              <section className="daily-report-settings">
+                <h3>Данные кассы за день</h3>
+                <label>Лимит ДС<input maxLength={100} value={dailySettings.cash_limit} onChange={(event) => setDailySettings({ ...dailySettings, cash_limit: event.target.value })} /></label>
+                <label>Остаток ЛС<input maxLength={100} value={dailySettings.cash_remaining} onChange={(event) => setDailySettings({ ...dailySettings, cash_remaining: event.target.value })} /></label>
+                <label>Инкассация<input maxLength={100} value={dailySettings.collection_status} onChange={(event) => setDailySettings({ ...dailySettings, collection_status: event.target.value })} /></label>
+                <button type="button" onClick={saveDailySettings}>Сохранить данные кассы</button>
+              </section>
             )}
 
             {reportLoading ? (

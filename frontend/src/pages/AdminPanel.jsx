@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api";
 
-const roleNames = { specialist: "Специалист", lead: "Ведущий", admin: "Администратор" };
+const roleNames = { specialist: "Специалист", cashier: "Кассир", lead: "Ведущий", admin: "Администратор" };
 
 export default function AdminPanel() {
   const [stores, setStores] = useState([]);
@@ -109,10 +109,10 @@ export default function AdminPanel() {
         <form className="form-grid admin-account-form" onSubmit={createAccount}>
           <input type="number" min="1" placeholder="Telegram ID" value={newStaff.telegram_id} onChange={(event) => setNewStaff({ ...newStaff, telegram_id: event.target.value })} required />
           <input placeholder="Имя сотрудника" value={newStaff.display_name} onChange={(event) => setNewStaff({ ...newStaff, display_name: event.target.value })} required />
-          <select value={newStaff.role} onChange={(event) => setNewStaff({ ...newStaff, role: event.target.value, store_id: event.target.value === "specialist" ? newStaff.store_id : "" })}>
-            <option value="specialist">Специалист</option><option value="lead">Ведущий</option><option value="admin">Администратор</option>
+          <select value={newStaff.role} onChange={(event) => setNewStaff({ ...newStaff, role: event.target.value, store_id: ["specialist", "cashier"].includes(event.target.value) ? newStaff.store_id : "" })}>
+            <option value="specialist">Специалист</option><option value="cashier">Кассир</option><option value="lead">Ведущий</option><option value="admin">Администратор</option>
           </select>
-          {newStaff.role === "specialist" && (
+          {["specialist", "cashier"].includes(newStaff.role) && (
             <select value={newStaff.store_id} onChange={(event) => setNewStaff({ ...newStaff, store_id: event.target.value })} required>
               <option value="">Назначить лавочку</option>
               {stores.filter((store) => store.is_active).map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
@@ -143,7 +143,7 @@ export default function AdminPanel() {
           </table>
         </div>
       </section>
-      <section className="card admin-permissions-note"><div className="section-title">Что разрешают роли</div><p><strong>Специалист</strong> — управляет товарами своей лавочки, оформляет продажи и видит свои продажи. Остатки меняются через продажи; ручная корректировка доступна администратору.</p><p><strong>Ведущий</strong> — просмотр товаров и отчётов сотрудников по всем лавочкам, без редактирования.</p><p><strong>Администратор</strong> — полный доступ, управление сотрудниками, лавочками, товарами и остатками.</p></section>
+      <section className="card admin-permissions-note"><div className="section-title">Что разрешают роли</div><p><strong>Специалист</strong> — управляет товарами своей лавочки, оформляет собственные продажи и заполняет три поля кассы в дневном отчёте.</p><p><strong>Кассир</strong> — оформляет и редактирует только собственные продажи в назначенной лавочке.</p><p><strong>Ведущий</strong> — видит отчёты команды, редактирует карточки товаров и продажи по лавочкам, назначает специалистам и кассирам роль и лавочку, меняет три поля кассы. Остатки может менять только администратор.</p><p><strong>Администратор</strong> — полный доступ, управление сотрудниками, лавочками, товарами и остатками.</p></section>
     </>
   );
 }

@@ -36,28 +36,38 @@ REPORT_ROWS = (
 )
 
 
-def build_daily_report(db: Session, report_date: date, timezone_name: str) -> str:
+def build_daily_report(
+    db: Session, report_date: date, timezone_name: str, store_id: int | None = None
+) -> str:
     zone = ZoneInfo(timezone_name)
     local_start = datetime.combine(report_date, time.min, tzinfo=zone)
     local_end = datetime.combine(report_date + timedelta(days=1), time.min, tzinfo=zone)
     start_utc = local_start.astimezone(timezone.utc).replace(tzinfo=None)
     end_utc = local_end.astimezone(timezone.utc).replace(tzinfo=None)
 
-    sales = (
-        db.query(models.Sale)
-        .filter(models.Sale.sale_date >= start_utc, models.Sale.sale_date < end_utc)
-        .order_by(models.Sale.product_name, models.Sale.sale_date)
-        .all()
+    query = db.query(models.Sale).filter(
+        models.Sale.sale_date >= start_utc, models.Sale.sale_date < end_utc
     )
+    if store_id is not None:
+        query = query.filter(models.Sale.store_id == store_id)
+    sales = query.order_by(models.Sale.product_name, models.Sale.sale_date).all()
+    settings = None
+    if store_id is not None:
+        settings = db.query(models.DailyReportSettings).filter_by(
+            store_id=store_id, report_date=report_date
+        ).first()
 
     return _format_report(
         f"Отчёт о продажах за {report_date.strftime('%d.%m.%Y')}",
         sales,
         "За выбранный день продаж нет.",
+        settings,
     )
 
 
-def build_monthly_report(db: Session, year: int, month: int, timezone_name: str) -> str:
+def build_monthly_report(
+    db: Session, year: int, month: int, timezone_name: str, store_id: int | None = None
+) -> str:
     if not 2000 <= year <= 2100 or not 1 <= month <= 12:
         raise ValueError("Некорректный год или месяц")
     zone = ZoneInfo(timezone_name)
@@ -69,12 +79,12 @@ def build_monthly_report(db: Session, year: int, month: int, timezone_name: str)
     )
     start_utc = local_start.astimezone(timezone.utc).replace(tzinfo=None)
     end_utc = local_end.astimezone(timezone.utc).replace(tzinfo=None)
-    sales = (
-        db.query(models.Sale)
-        .filter(models.Sale.sale_date >= start_utc, models.Sale.sale_date < end_utc)
-        .order_by(models.Sale.product_name, models.Sale.sale_date)
-        .all()
+    query = db.query(models.Sale).filter(
+        models.Sale.sale_date >= start_utc, models.Sale.sale_date < end_utc
     )
+    if store_id is not None:
+        query = query.filter(models.Sale.store_id == store_id)
+    sales = query.order_by(models.Sale.product_name, models.Sale.sale_date).all()
     return _format_report(
         f"Отчёт о продажах за {month:02d}.{year}",
         sales,
@@ -82,7 +92,7 @@ def build_monthly_report(db: Session, year: int, month: int, timezone_name: str)
     )
 
 
-def _format_report(title: str, sales: list, empty_message: str) -> str:
+def _format_report(title: str, sales: list, empty_message: str, settings=None) -> str:
     normalized_aliases = {
         alias.casefold(): (label, metric)
         for label, _plan, metric, aliases in REPORT_ROWS
@@ -124,9 +134,9 @@ def _format_report(title: str, sales: list, empty_message: str) -> str:
 
     lines.extend(
         [
-            "Лимит Дс 60к",
-            "Остаток ЛС: 80к",
-            "Инкассация: нет",
+            f"Лимит Дс {settings.cash_limit if settings else '60к'}",
+            f"Остаток ЛС: {settings.cash_remaining if settings else '80к'}",
+            f"Инкассация: {settings.collection_status if settings else 'нет'}",
             "Отказы со стороны банка:0 2",
         ]
     )

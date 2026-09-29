@@ -856,6 +856,19 @@ tbody tr:hover { background: rgba(255, 255, 255, .025); }
 .staff-product-details { min-width: 160px; }
 .staff-product-details summary { color: #8db9ff; cursor: pointer; font-weight: 650; }
 .staff-product-details ul { min-width: 250px; padding-left: 18px; color: #afb5bf; line-height: 1.55; }
+.daily-report-settings {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+  padding: 14px;
+  border: 1px solid #293449;
+  border-radius: 14px;
+  background: #111827;
+}
+.daily-report-settings h3 { grid-column: 1 / -1; margin: 0; }
+.daily-report-settings label { display: grid; gap: 6px; color: #aeb4bf; font-size: 13px; }
+.daily-report-settings button { grid-column: 1 / -1; justify-self: start; }
 
 @media (max-width: 650px) {
   .account-chip { margin: -5px 2px 12px; font-size: 12px; }
@@ -863,6 +876,8 @@ tbody tr:hover { background: rgba(255, 255, 255, .025); }
   .admin-store-row { grid-template-columns: minmax(0, 1fr) auto; }
   .admin-store-row > button { grid-column: 1 / -1; }
   .team-report-filters { grid-template-columns: 1fr; }
+  .daily-report-settings { grid-template-columns: 1fr; }
+  .daily-report-settings h3, .daily-report-settings button { grid-column: 1; }
   .nav-count-5 { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
   .nav-count-5 a { font-size: 9px; }
 }

@@ -23,6 +23,18 @@ class StaffAccount(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
+
+class DailyReportSettings(Base):
+    __tablename__ = "daily_report_settings"
+    __table_args__ = (UniqueConstraint("store_id", "report_date", name="uq_report_settings_store_date"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    store_id = Column(Integer, ForeignKey("stores.id"), nullable=False, index=True)
+    report_date = Column(Date, nullable=False, index=True)
+    cash_limit = Column(String(100), nullable=False, default="60к")
+    cash_remaining = Column(String(100), nullable=False, default="80к")
+    collection_status = Column(String(100), nullable=False, default="нет")
+
 class Category(Base):
     __tablename__ = "categories"
 

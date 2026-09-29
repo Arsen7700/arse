@@ -20,13 +20,16 @@ const icons = {
 };
 
 function Layout({ children, user }) {
+  const isCashier = user.role === "cashier";
   const navigation = [
     { to: "/", label: "Обзор", icon: "overview" },
-    { to: "/products", label: "Товары", icon: "products" },
+    ...(!isCashier ? [{ to: "/products", label: "Товары", icon: "products" }] : []),
     { to: "/sales", label: "Продажи", icon: "sales" },
     ...(user.role === "lead"
       ? [{ to: "/team-reports", label: "Команда", icon: "team" }]
-      : [{ to: "/goals", label: "Мои цели", icon: "goals" }]),
+      : user.role === "specialist" || user.role === "admin"
+        ? [{ to: "/goals", label: "Мои цели", icon: "goals" }]
+        : []),
     ...(user.role === "admin" ? [{ to: "/admin", label: "Админ", icon: "admin" }] : []),
   ];
 
@@ -87,9 +90,9 @@ function AuthenticatedApp() {
         <Suspense fallback={<div className="card">Загрузка страницы…</div>}>
           <Routes>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/products" element={<Products />} />
+            <Route path="/products" element={user.role === "cashier" ? <Dashboard /> : <Products />} />
             <Route path="/sales" element={<Sales />} />
-            <Route path="/goals" element={<Goals />} />
+            <Route path="/goals" element={user.role === "cashier" || user.role === "lead" ? <Dashboard /> : <Goals />} />
             <Route path="/team-reports" element={user.role === "admin" || user.role === "lead" ? <TeamReports /> : <Dashboard />} />
             <Route path="/admin" element={user.role === "admin" ? <AdminPanel /> : <Dashboard />} />
             <Route path="*" element={<Dashboard />} />

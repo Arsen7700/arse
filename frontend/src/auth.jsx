@@ -7,5 +7,5 @@ export function useAuth() {
 }
 
 export function roleLabel(role) {
-  return ({ admin: "Администратор", lead: "Ведущий", specialist: "Специалист" })[role] || role;
+  return ({ admin: "Администратор", lead: "Ведущий", specialist: "Специалист", cashier: "Кассир" })[role] || role;
 }

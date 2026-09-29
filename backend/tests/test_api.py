@@ -227,9 +227,18 @@ def test_shop_scoping_specialist_permissions_and_lead_reports(client):
         assert second_specialist["products"][0]["product_name"] == "Товар второй лавочки"
         assert second_specialist["products"][0]["sold_quantity"] == 2
         assert len(client.get("/products").json()) == 3
-        assert client.post(
-            "/sales", json={"product_id": first_product["id"], "quantity": 1}
-        ).status_code == 403
+        lead_sale = client.post(
+            "/sales",
+            json={"product_id": first_product["id"], "quantity": 1, "sale_date": datetime.now().isoformat()},
+        )
+        assert lead_sale.status_code == 200, lead_sale.text
+        assert client.put(
+            f"/products/{first_product['id']}", json={"name": "Товар изменён ведущим"}
+        ).status_code == 200
+        assert client.put(
+            f"/sales/{lead_sale.json()['id']}", json={"quantity": 2}
+        ).status_code == 200
+        assert client.delete(f"/sales/{lead_sale.json()['id']}").status_code == 200
         assert client.get("/admin/users").status_code == 403
     finally:
         app.dependency_overrides.pop(current_user, None)
@@ -264,6 +273,98 @@ def test_admin_can_manage_stores_and_telegram_accounts(client):
     )
     assert updated.status_code == 200
     assert updated.json()["is_active"] is False
+
+
+def test_lead_can_assign_specialist_and_cashier_roles(client):
+    store = client.post("/admin/stores", json={"name": "Лавочка для ролей"}).json()
+    account = client.post(
+        "/admin/users",
+        json={
+            "telegram_id": 61616,
+            "display_name": "Кассовый сотрудник",
+            "role": "specialist",
+            "store_id": store["id"],
+        },
+    )
+    assert account.status_code == 200, account.text
+    app.dependency_overrides[current_user] = lambda: CurrentUser(71717, "Ведущий", "lead")
+    try:
+        assert client.get("/team/staff").status_code == 200
+        added_cashier = client.post(
+            "/team/staff",
+            json={
+                "telegram_id": 62626,
+                "display_name": "Новый кассир",
+                "role": "cashier",
+                "store_id": store["id"],
+            },
+        )
+        assert added_cashier.status_code == 200, added_cashier.text
+        assert added_cashier.json()["role"] == "cashier"
+        changed = client.put(
+            "/team/staff/61616",
+            json={"role": "cashier", "store_id": store["id"]},
+        )
+        assert changed.status_code == 200, changed.text
+        assert changed.json()["role"] == "cashier"
+        assert client.get("/admin/users").status_code == 403
+        assert client.put(
+            "/team/staff/61616", json={"role": "admin", "store_id": store["id"]}
+        ).status_code == 422
+    finally:
+        app.dependency_overrides.pop(current_user, None)
+
+
+def test_cashier_can_register_and_edit_only_own_store_sales(client):
+    store = client.post("/admin/stores", json={"name": "Кассовая лавочка"}).json()
+    product = client.post(
+        "/products",
+        json={"name": "Товар кассы", "sale_price": 15, "quantity": 4, "store_id": store["id"]},
+    ).json()
+    app.dependency_overrides[current_user] = lambda: CurrentUser(81818, "Кассир", "cashier", store["id"])
+    try:
+        sale = client.post(
+            "/sales",
+            json={"product_id": product["id"], "quantity": 1, "sale_date": datetime.now().isoformat()},
+        )
+        assert sale.status_code == 200, sale.text
+        assert sale.json()["created_by_telegram_id"] == 81818
+        assert client.get("/sales").json()[0]["id"] == sale.json()["id"]
+        assert client.post(
+            "/products", json={"name": "Нет прав", "sale_price": 1, "quantity": 1}
+        ).status_code == 403
+        assert client.patch(f"/products/{product['id']}/stock", json={"amount": 1}).status_code == 403
+    finally:
+        app.dependency_overrides.pop(current_user, None)
+
+
+def test_specialist_can_save_daily_cash_report_fields_for_own_store(client):
+    store = client.post("/admin/stores", json={"name": "Лавочка отчёта"}).json()
+    other_store = client.post("/admin/stores", json={"name": "Чужая лавочка"}).json()
+    app.dependency_overrides[current_user] = lambda: CurrentUser(91919, "Специалист", "specialist", store["id"])
+    try:
+        saved = client.put(
+            "/reports/daily-settings",
+            json={
+                "report_date": "2026-09-30",
+                "cash_limit": "75к",
+                "cash_remaining": "42к",
+                "collection_status": "да",
+            },
+        )
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["cash_limit"] == "75к"
+        assert saved.json()["cash_remaining"] == "42к"
+        assert saved.json()["collection_status"] == "да"
+        defaults = client.get("/reports/daily-settings", params={"report_date": "2026-10-01"})
+        assert defaults.json()["cash_limit"] == "60к"
+        denied = client.get(
+            "/reports/daily-settings",
+            params={"report_date": "2026-09-30", "store_id": other_store["id"]},
+        )
+        assert denied.status_code == 403
+    finally:
+        app.dependency_overrides.pop(current_user, None)
 
 
 def test_product_can_be_created_without_purchase_price(client):
@@ -611,7 +712,7 @@ def test_telegram_schedule_requires_admin_key(client, monkeypatch):
 def test_manual_telegram_report_uses_admin_key_and_sends_selected_date(client, monkeypatch):
     monkeypatch.setenv("TELEGRAM_ADMIN_KEY", "test-admin-secret")
     delivered = []
-    monkeypatch.setattr(main_module, "build_daily_report", lambda db, day, zone: f"report {day} {zone}")
+    monkeypatch.setattr(main_module, "build_daily_report", lambda db, day, zone, store_id=None: f"report {day} {zone}")
     monkeypatch.setattr(main_module, "send_telegram_message", delivered.append)
 
     denied = client.post("/telegram/send-report", json={"report_date": "2026-09-23"})
@@ -706,6 +807,35 @@ def test_daily_telegram_report_shows_zero_facts_without_sales(client, monkeypatc
     assert "SA: 30/ 0" in delivered[0]
     assert "Мой: 25/ 0" in delivered[0]
     assert "Карты: 25/ 0" in delivered[0]
+
+
+def test_daily_telegram_report_includes_selected_store_cash_fields(client, monkeypatch):
+    monkeypatch.setenv("TELEGRAM_ADMIN_KEY", "test-admin-secret")
+    store = client.post("/admin/stores", json={"name": "Лавочка для Telegram"}).json()
+    saved = client.put(
+        "/reports/daily-settings",
+        json={
+            "report_date": "2026-09-29",
+            "store_id": store["id"],
+            "cash_limit": "55к",
+            "cash_remaining": "12к",
+            "collection_status": "да",
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    delivered = []
+    monkeypatch.setattr(main_module, "send_telegram_message", delivered.append)
+
+    response = client.post(
+        "/telegram/send-report",
+        json={"report_date": "2026-09-29", "store_id": store["id"]},
+        headers={"X-Telegram-Admin-Key": "test-admin-secret"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert "Лимит Дс 55к" in delivered[0]
+    assert "Остаток ЛС: 12к" in delivered[0]
+    assert "Инкассация: да" in delivered[0]
 
 
 def test_monthly_telegram_report_requires_valid_year_and_month(client, monkeypatch):

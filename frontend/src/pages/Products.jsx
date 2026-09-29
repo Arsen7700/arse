@@ -14,8 +14,10 @@ const emptyForm = {
 
 export default function Products() {
   const user = useAuth();
-  const readOnly = user?.role === "lead";
+  const isLead = user?.role === "lead";
+  const readOnly = false;
   const isAdmin = user?.role === "admin";
+  const canSelectStore = isAdmin || isLead;
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [stores, setStores] = useState([]);
@@ -56,7 +58,7 @@ export default function Products() {
       sale_price: Number(form.sale_price),
       quantity: Number(form.quantity),
     };
-    if (!isAdmin) delete payload.store_id;
+    if (!canSelectStore) delete payload.store_id;
 
     try {
       if (editingId) {
@@ -110,7 +112,7 @@ export default function Products() {
       <div className="page-header">
         <div>
           <h1>Товары</h1>
-          <p className="muted">{readOnly ? "Просмотр товаров всех лавочек" : "Управление товарами вашей лавочки"}</p>
+          <p className="muted">{isLead ? "Редактирование карточек товаров по всем лавочкам; складские остатки доступны администратору" : "Управление товарами вашей лавочки"}</p>
         </div>
       </div>
 
@@ -137,7 +139,7 @@ export default function Products() {
               </option>
             ))}
           </select>
-          {isAdmin && (
+          {canSelectStore && (
             <select value={form.store_id} onChange={(e) => setForm({ ...form, store_id: e.target.value })}>
               <option value="">Основная лавочка</option>
               {stores.filter((store) => store.is_active).map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
@@ -214,7 +216,7 @@ export default function Products() {
             <thead>
               <tr>
                 <th>Название</th>
-                {(isAdmin || readOnly) && <th>Лавочка</th>}
+                {(isAdmin || isLead) && <th>Лавочка</th>}
                 <th>Продажа</th>
                 <th>Остаток</th>
                 {!readOnly && <th>Действия</th>}
@@ -224,7 +226,7 @@ export default function Products() {
               {products.map((p) => (
                 <tr key={p.id}>
                   <td>{p.name}</td>
-                  {(isAdmin || readOnly) && <td>{stores.find((store) => store.id === p.store_id)?.name || `Лавочка ${p.store_id}`}</td>}
+                  {(isAdmin || isLead) && <td>{stores.find((store) => store.id === p.store_id)?.name || `Лавочка ${p.store_id}`}</td>}
                   <td>{p.sale_price} сом</td>
                   <td>{p.quantity}</td>
                   {!readOnly && <td className="actions">

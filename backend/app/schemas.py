@@ -21,14 +21,14 @@ class StoreUpdate(BaseModel):
 class StaffAccountCreate(BaseModel):
     telegram_id: int = Field(gt=0)
     display_name: str = Field(min_length=1, max_length=200)
-    role: Literal["specialist", "lead", "admin"] = "specialist"
+    role: Literal["specialist", "cashier", "lead", "admin"] = "specialist"
     store_id: Optional[int] = None
     is_active: bool = True
 
 
 class StaffAccountUpdate(BaseModel):
     display_name: Optional[str] = Field(default=None, min_length=1, max_length=200)
-    role: Optional[Literal["specialist", "lead", "admin"]] = None
+    role: Optional[Literal["specialist", "cashier", "lead", "admin"]] = None
     store_id: Optional[int] = None
     is_active: Optional[bool] = None
 
@@ -40,6 +40,35 @@ class StaffAccountOut(BaseModel):
     store_id: Optional[int]
     store_name: Optional[str] = None
     is_active: bool
+
+
+class TeamStaffRoleUpdate(BaseModel):
+    role: Literal["specialist", "cashier"]
+    store_id: int = Field(gt=0)
+
+
+class TeamStaffCreate(BaseModel):
+    telegram_id: int = Field(gt=0)
+    display_name: str = Field(min_length=1, max_length=200)
+    role: Literal["specialist", "cashier"]
+    store_id: int = Field(gt=0)
+
+
+class DailyReportSettingsUpdate(BaseModel):
+    model_config = {"str_strip_whitespace": True}
+    report_date: date
+    store_id: Optional[int] = None
+    cash_limit: str = Field(min_length=1, max_length=100)
+    cash_remaining: str = Field(min_length=1, max_length=100)
+    collection_status: str = Field(min_length=1, max_length=100)
+
+
+class DailyReportSettingsOut(BaseModel):
+    report_date: date
+    store_id: int
+    cash_limit: str
+    cash_remaining: str
+    collection_status: str
 
 class CategoryCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
@@ -188,6 +217,7 @@ class TelegramScheduleOut(TelegramScheduleUpdate):
 class TelegramReportRequest(BaseModel):
     period: Literal["day", "month"] = "day"
     report_date: Optional[date] = None
+    store_id: Optional[int] = Field(default=None, gt=0)
     report_year: Optional[int] = Field(default=None, ge=2000, le=2100)
     report_month: Optional[int] = Field(default=None, ge=1, le=12)
 

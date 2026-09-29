@@ -3,6 +3,7 @@ import { api } from "../api";
 
 const dateValue = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const money = (value) => `${Number(value || 0).toLocaleString("ru-RU")} сом`;
+const roleNames = { specialist: "Специалист", cashier: "Кассир" };
 
 export default function TeamReports() {
   const today = new Date();
@@ -12,14 +13,54 @@ export default function TeamReports() {
   const [storeId, setStoreId] = useState("");
   const [stores, setStores] = useState([]);
   const [staff, setStaff] = useState([]);
+  const [teamAccounts, setTeamAccounts] = useState([]);
+  const [newAccount, setNewAccount] = useState({ telegram_id: "", display_name: "", role: "specialist", store_id: "" });
+  const [managementMessage, setManagementMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api.get("/stores")
-      .then((response) => setStores(response.data))
-      .catch((requestError) => setError(requestError.response?.data?.detail || "Не удалось загрузить список лавочек"));
+    Promise.all([api.get("/stores"), api.get("/team/staff")])
+      .then(([storesResponse, staffResponse]) => {
+        setStores(storesResponse.data);
+        setTeamAccounts(staffResponse.data);
+      })
+      .catch((requestError) => setError(requestError.response?.data?.detail || "Не удалось загрузить сотрудников и лавочки"));
   }, []);
+
+  const updateTeamAccount = (telegramId, field, value) => {
+    setTeamAccounts((current) => current.map((person) => person.telegram_id === telegramId
+      ? { ...person, [field]: value }
+      : person));
+  };
+
+  const saveTeamAccount = async (person) => {
+    try {
+      await api.put(`/team/staff/${person.telegram_id}`, {
+        role: person.role,
+        store_id: Number(person.store_id),
+      });
+      setManagementMessage(`Роль и лавочка сотрудника ${person.display_name} сохранены.`);
+    } catch (requestError) {
+      setManagementMessage(requestError.response?.data?.detail || "Не удалось сохранить роль сотрудника");
+    }
+  };
+
+  const createTeamAccount = async (event) => {
+    event.preventDefault();
+    try {
+      const response = await api.post("/team/staff", {
+        ...newAccount,
+        telegram_id: Number(newAccount.telegram_id),
+        store_id: Number(newAccount.store_id),
+      });
+      setTeamAccounts((current) => [...current, response.data].sort((a, b) => a.display_name.localeCompare(b.display_name, "ru")));
+      setNewAccount({ telegram_id: "", display_name: "", role: "specialist", store_id: "" });
+      setManagementMessage("Сотруднику выдан доступ в выбранную лавочку.");
+    } catch (requestError) {
+      setManagementMessage(requestError.response?.data?.detail || "Не удалось добавить сотрудника");
+    }
+  };
 
   useEffect(() => {
     if (!startDate || !endDate) return;
@@ -81,6 +122,34 @@ export default function TeamReports() {
           </table>
         </div>
         <p className="small">Продажи, внесённые до подключения учётных записей, отмечены отдельно: у них нет сохранённого автора.</p>
+      </section>
+      <section className="card">
+        <div className="section-title">Назначение специалистов и кассиров</div>
+        <p className="muted">Добавляйте сотрудников или меняйте роль специалиста/кассира и их лавочку. Ведущих и администраторов здесь назначать нельзя.</p>
+        {managementMessage && <div className="notice">{managementMessage}</div>}
+        <form className="form-grid admin-account-form" onSubmit={createTeamAccount}>
+          <input type="number" min="1" placeholder="Telegram ID" value={newAccount.telegram_id} onChange={(event) => setNewAccount({ ...newAccount, telegram_id: event.target.value })} required />
+          <input placeholder="Имя сотрудника" value={newAccount.display_name} onChange={(event) => setNewAccount({ ...newAccount, display_name: event.target.value })} required />
+          <select value={newAccount.role} onChange={(event) => setNewAccount({ ...newAccount, role: event.target.value })}><option value="specialist">Специалист</option><option value="cashier">Кассир</option></select>
+          <select value={newAccount.store_id} onChange={(event) => setNewAccount({ ...newAccount, store_id: event.target.value })} required><option value="">Выберите лавочку</option>{stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}</select>
+          <button className="primary" type="submit">Добавить сотрудника</button>
+        </form>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Сотрудник</th><th>Telegram ID</th><th>Роль</th><th>Лавочка</th><th>Сохранить</th></tr></thead>
+            <tbody>
+              {teamAccounts.map((person) => (
+                <tr key={person.telegram_id}>
+                  <td>{person.display_name}</td><td>{person.telegram_id}</td>
+                  <td><select aria-label={`Роль ${person.display_name}`} value={person.role} onChange={(event) => updateTeamAccount(person.telegram_id, "role", event.target.value)}>{Object.entries(roleNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></td>
+                  <td><select aria-label={`Лавочка ${person.display_name}`} value={person.store_id || ""} onChange={(event) => updateTeamAccount(person.telegram_id, "store_id", event.target.value)}>{stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}</select></td>
+                  <td><button className="primary" type="button" disabled={!person.store_id} onClick={() => saveTeamAccount(person)}>Сохранить</button></td>
+                </tr>
+              ))}
+              {!teamAccounts.length && <tr><td colSpan="5">Специалисты и кассиры не найдены.</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </section>
     </>
   );

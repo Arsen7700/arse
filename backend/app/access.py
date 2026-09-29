@@ -33,7 +33,7 @@ def require_roles(*roles: str) -> Callable:
 
 def apply_store_scope(query: Query, model, user: CurrentUser, store_id: int | None = None) -> Query:
     """Restrict specialist queries to their assigned shop; admin/lead may filter any shop."""
-    if user.role == "specialist":
+    if user.role in {"specialist", "cashier"}:
         if user.store_id is None:
             raise HTTPException(status_code=403, detail="Администратор должен назначить вам лавочку")
         if store_id is not None and store_id != user.store_id:
@@ -45,7 +45,7 @@ def apply_store_scope(query: Query, model, user: CurrentUser, store_id: int | No
 
 
 def assigned_store_id(user: CurrentUser, requested_store_id: int | None = None) -> int | None:
-    if user.role == "specialist":
+    if user.role in {"specialist", "cashier"}:
         if user.store_id is None:
             raise HTTPException(status_code=403, detail="Администратор должен назначить вам лавочку")
         if requested_store_id is not None and requested_store_id != user.store_id:
