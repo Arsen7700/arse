@@ -611,7 +611,7 @@ def list_categories(db: Session = Depends(get_db), _user: CurrentUser = Depends(
 def create_product(
     payload: schemas.ProductCreate,
     db: Session = Depends(get_db),
-    user: CurrentUser = Depends(require_roles("specialist", "lead")),
+    user: CurrentUser = Depends(require_roles("lead")),
 ):
     selected_store_id = assigned_store_id(user, payload.store_id)
     store = get_store(db, selected_store_id) if selected_store_id is not None else ensure_default_store(db)

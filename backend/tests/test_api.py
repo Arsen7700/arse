@@ -111,10 +111,15 @@ def test_production_admin_can_invite_telegram_specialist(client, monkeypatch):
         json={"name": "Товар специалиста", "sale_price": 50, "quantity": 20},
         headers=specialist_headers,
     )
-    assert created.status_code == 200, created.text
-    assert created.json()["quantity"] == 0
+    assert created.status_code == 403
+    admin_created = client.post(
+        "/products",
+        json={"name": "Товар администратора", "sale_price": 50, "quantity": 20, "store_id": store_id},
+        headers=admin_headers,
+    )
+    assert admin_created.status_code == 200, admin_created.text
     assert client.patch(
-        f"/products/{created.json()['id']}/stock",
+        f"/products/{admin_created.json()['id']}/stock",
         json={"amount": 3},
         headers=specialist_headers,
     ).status_code == 403
@@ -178,9 +183,7 @@ def test_shop_scoping_specialist_permissions_and_lead_reports(client):
             "/products",
             json={"name": "Новый товар", "sale_price": 12, "quantity": 99},
         )
-        assert own_product.status_code == 200, own_product.text
-        assert own_product.json()["quantity"] == 0
-        assert own_product.json()["store_id"] == first_store_id
+        assert own_product.status_code == 403
 
         outsider = client.get("/products", params={"store_id": second_store_id})
         assert outsider.status_code == 403
@@ -219,6 +222,12 @@ def test_shop_scoping_specialist_permissions_and_lead_reports(client):
         assert second_sale.status_code == 200, second_sale.text
 
         use_user(40404, "lead")
+        lead_product = client.post(
+            "/products",
+            json={"name": "Товар ведущего", "sale_price": 20, "quantity": 8, "store_id": first_store_id},
+        )
+        assert lead_product.status_code == 200, lead_product.text
+        assert lead_product.json()["quantity"] == 0
         report = client.get("/reports/staff")
         assert report.status_code == 200, report.text
         assert len(report.json()) == 3

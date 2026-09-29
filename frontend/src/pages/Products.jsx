@@ -17,6 +17,7 @@ export default function Products() {
   const isLead = user?.role === "lead";
   const readOnly = false;
   const isAdmin = user?.role === "admin";
+  const canAddProduct = isLead || isAdmin;
   const canSelectStore = isAdmin || isLead;
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -112,11 +113,11 @@ export default function Products() {
       <div className="page-header">
         <div>
           <h1>Товары</h1>
-          <p className="muted">{isLead ? "Редактирование карточек товаров по всем лавочкам; складские остатки доступны администратору" : "Управление товарами вашей лавочки"}</p>
+          <p className="muted">{isLead ? "Добавление и редактирование карточек по всем лавочкам; складские остатки доступны администратору" : isAdmin ? "Полное управление товарами и остатками" : "Просмотр товаров лавочки; добавление доступно ведущему или администратору"}</p>
         </div>
       </div>
 
-      {!readOnly && <div className="card">
+      {(!readOnly && (canAddProduct || editingId)) && <div className="card">
         <div className="section-title">
           {editingId ? "Редактировать товар" : "Добавить товар"}
         </div>
