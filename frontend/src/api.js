@@ -6,3 +6,11 @@ export const api = axios.create({
     "Content-Type": "application/json",
   },
 });
+
+api.interceptors.request.use((config) => {
+  const initData = window.Telegram?.WebApp?.initData;
+  if (initData) {
+    config.headers["X-Telegram-Init-Data"] = initData;
+  }
+  return config;
+});

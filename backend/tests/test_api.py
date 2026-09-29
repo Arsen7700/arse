@@ -1,4 +1,9 @@
 from datetime import datetime
+import hashlib
+import hmac
+import json
+import time
+from urllib.parse import urlencode
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,7 +17,8 @@ import app.main as main_module
 
 
 @pytest.fixture()
-def client():
+def client(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "development")
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -34,6 +40,42 @@ def client():
     app.dependency_overrides.clear()
     Base.metadata.drop_all(bind=engine)
     engine.dispose()
+
+
+def signed_telegram_init_data(bot_token, user_id):
+    fields = {
+        "auth_date": str(int(time.time())),
+        "query_id": "test-query",
+        "user": json.dumps({"id": user_id, "first_name": "Test"}, separators=(",", ":")),
+    }
+    check_string = "\n".join(f"{key}={value}" for key, value in sorted(fields.items()))
+    secret_key = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+    fields["hash"] = hmac.new(secret_key, check_string.encode(), hashlib.sha256).hexdigest()
+    return urlencode(fields)
+
+
+def test_production_api_requires_valid_allowed_telegram_user(client, monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-bot-token")
+    monkeypatch.setenv("TELEGRAM_ALLOWED_USER_IDS", "12345")
+
+    missing = client.get(
+        "/products", headers={"Origin": "http://localhost:5173"}
+    )
+    assert missing.status_code == 401
+    assert missing.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+    unauthorized_user = client.get(
+        "/products",
+        headers={"X-Telegram-Init-Data": signed_telegram_init_data("test-bot-token", 67890)},
+    )
+    assert unauthorized_user.status_code == 403
+
+    authorized_user = client.get(
+        "/products",
+        headers={"X-Telegram-Init-Data": signed_telegram_init_data("test-bot-token", 12345)},
+    )
+    assert authorized_user.status_code == 200, authorized_user.text
 
 
 def create_product(client, *, quantity=5, purchase_price=10, sale_price=25):

@@ -24,6 +24,19 @@ function Layout({ children }) {
 }
 
 export default function App() {
+  if (import.meta.env.PROD && !window.Telegram?.WebApp?.initData) {
+    return (
+      <main className="content telegram-only-notice">
+        <section className="card">
+          <h1>Откройте через Telegram</h1>
+          <p className="muted">
+            Для безопасного доступа к складу запустите Mini App кнопкой меню в чате с ботом.
+          </p>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <Layout>
       <Suspense fallback={<div>Загрузка страницы...</div>}>

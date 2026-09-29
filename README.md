@@ -75,6 +75,6 @@ pnpm install
 pnpm build
 ```
 
-Перед публичным запуском настройте CORS и учтите, что приложение пока не имеет входа в систему или разграничения прав. CORS не заменяет авторизацию: API позволяет клиенту менять данные. Не публикуйте рабочие данные до внедрения аутентификации или защиты API на доверенном уровне.
+В production доступ к API защищается подписью Telegram Mini App и списком числовых Telegram ID в `TELEGRAM_ALLOWED_USER_IDS`. Пользователь должен запускать сайт кнопкой Mini App в Telegram; прямой браузерный доступ к API закрыт. Настройте `TELEGRAM_BOT_TOKEN` и список разрешённых ID на Render. Инструкции BotFather и Render/Vercel находятся в [DEPLOY.md](DEPLOY.md).
 
 Подробная инструкция Render/Vercel и миграции SQLite → PostgreSQL: [DEPLOY.md](DEPLOY.md).

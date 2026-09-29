@@ -5,8 +5,9 @@ import os
 from decimal import Decimal, ROUND_HALF_UP
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import FastAPI, Depends, HTTPException, Header, Query
+from fastapi import FastAPI, Depends, HTTPException, Header, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import extract, func, update
 from datetime import datetime
@@ -21,6 +22,7 @@ from .telegram_reports import (
     check_and_send_scheduled_report,
     send_telegram_message,
 )
+from .telegram_auth import TelegramInitDataError, validate_telegram_init_data
 
 migrate_sales_schema(engine)
 Base.metadata.create_all(bind=engine)
@@ -72,6 +74,48 @@ cors_origins = [
     if origin.strip()
 ]
 
+@app.middleware("http")
+async def require_telegram_mini_app_user(request: Request, call_next):
+    """Protect production API routes; keep health/docs and local development usable."""
+    if os.getenv("APP_ENV", "production").lower() in {"development", "dev", "test"}:
+        return await call_next(request)
+    if request.method == "OPTIONS" or request.url.path in {"/", "/docs", "/openapi.json", "/redoc"}:
+        return await call_next(request)
+
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    allowed_ids = {
+        value.strip()
+        for value in os.getenv("TELEGRAM_ALLOWED_USER_IDS", "").split(",")
+        if value.strip()
+    }
+    if not bot_token or not allowed_ids:
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Настройте TELEGRAM_BOT_TOKEN и TELEGRAM_ALLOWED_USER_IDS"},
+        )
+
+    init_data = request.headers.get("X-Telegram-Init-Data", "")
+    if not init_data:
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Откройте приложение через кнопку бота в Telegram"},
+        )
+    try:
+        telegram_user_id = validate_telegram_init_data(init_data, bot_token)
+    except TelegramInitDataError:
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Не удалось подтвердить вход через Telegram. Откройте Mini App заново."},
+        )
+    if str(telegram_user_id) not in allowed_ids:
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "Ваш Telegram-аккаунт не имеет доступа к этому складу"},
+        )
+    return await call_next(request)
+
+
+# Add CORS last so it wraps auth middleware and also decorates 401/403 responses.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
@@ -725,7 +769,7 @@ def monthly_report(db: Session = Depends(get_db)):
 
 @app.post("/seed")
 def seed(db: Session = Depends(get_db)):
-    if os.getenv("APP_ENV", "development").lower() == "production":
+    if os.getenv("APP_ENV", "production").lower() == "production":
         raise HTTPException(status_code=404, detail="Not found")
     if db.query(models.Product).count() > 0:
         return {"message": "Тестовые данные уже есть"}
