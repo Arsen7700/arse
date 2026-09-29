@@ -111,13 +111,13 @@ def build_personal_sales_report(
     )
     grouped: dict[str, dict[str, Decimal | int]] = {}
     for sale in sales:
-        legacy_service = (sale.product_name or "").strip().casefold() in {"услуги", "услуга"}
-        product_name = "SA" if legacy_service else sale.product_name
+        is_service = (sale.product_name or "").strip().casefold() in {"услуги", "услуга"}
+        product_name = "SA" if is_service else sale.product_name
         item = grouped.setdefault(
             product_name,
             {"quantity": 0, "amount": Decimal("0")},
         )
-        if not legacy_service:
+        if not is_service:
             item["quantity"] += sale.quantity
         item["amount"] += Decimal(str(sale.total_amount))
 
@@ -131,7 +131,7 @@ def build_personal_sales_report(
         lines.append("За выбранный период продаж нет.")
     lines.extend([
         "",
-        f"Всего продано: {sum(sale.quantity for sale in sales if (sale.product_name or '').strip().casefold() not in {'услуги', 'услуга'})} шт.",
+        f"Всего продано: {sum(sale.quantity for sale in sales)} шт.",
     ])
     return "\n".join(lines)
 
@@ -152,8 +152,8 @@ def _format_report(title: str, sales: list, empty_message: str, settings=None) -
             continue
         label, _metric = mapped
         item = actuals[label]
-        legacy_service = (sale.product_name or "").strip().casefold() in {"услуги", "услуга"}
-        if not legacy_service:
+        is_service = (sale.product_name or "").strip().casefold() in {"услуги", "услуга"}
+        if not is_service:
             item["quantity"] += sale.quantity
         item["revenue"] += Decimal(str(sale.total_amount))
 
@@ -163,7 +163,7 @@ def _format_report(title: str, sales: list, empty_message: str, settings=None) -
         item = actuals[label]
         if metric == "sa":
             lines.append(
-                f"{label}: {plan}/ {item['quantity']}шт ({item['revenue']:.0f} сом)"
+                f"{label}: {item['quantity']} шт.; сумма SA (услуги) {item['revenue']:.0f} сом"
             )
         elif metric == "revenue":
             fact = f"{item['revenue']:.0f}"

@@ -1440,15 +1440,20 @@ def dashboard(
 
     for sale in sales:
         sale_name = sale.product_name.strip().casefold()
-        legacy_service = sale_name in {"услуги", "услуга"}
-        key = ("plan_fact", "sa" if legacy_service else sale_name)
+        key = ("plan_fact", sale_name)
         if key not in product_stats:
             continue
         stats = product_stats[key]
-        if not legacy_service:
+        is_service = sale_name in {"услуги", "услуга"}
+        if not is_service:
             stats["sold_quantity"] += sale.quantity
         stats["revenue"] += sale.total_amount
         stats["profit"] += sale.profit
+        if is_service:
+            sa_stats = product_stats.get(("plan_fact", "sa"))
+            if sa_stats is not None:
+                sa_stats["revenue"] += sale.total_amount
+                sa_stats["profit"] += sale.profit
 
     per_product = [
         {

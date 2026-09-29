@@ -14,10 +14,6 @@ const REPORT_ROWS = [
   { label: "Вместе дешевле", plan: 0, metric: "bundle", aliases: ["вместе дешевле"] },
   { label: "O!семья", plan: 0, metric: "family", aliases: ["o!семья", "o! семья"] },
 ];
-const isLegacyService = (name) => ["услуги", "услуга"].includes(
-  (name || "").trim().toLocaleLowerCase("ru-RU")
-);
-
 const toLocalDateTime = (value) => {
   const date = new Date(value);
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
@@ -78,7 +74,6 @@ export default function Sales() {
   const [inventoryItems, setInventoryItems] = useState([
     { category_id: "", product_id: "", quantity: 1, total_amount: "" },
   ]);
-  const [servicesAmount, setServicesAmount] = useState("");
   const [saleDate, setSaleDate] = useState(() => toLocalDateTime(new Date()));
   const [message, setMessage] = useState("");
   const [historyMessage, setHistoryMessage] = useState("");
@@ -143,13 +138,9 @@ export default function Sales() {
     const parent = products.find((product) => product.id === Number(categoryId));
     if (!parent) return [];
     return products
-      .filter((product) => product.name !== "Услуги"
-        && (product.id === parent.id || product.parent_product_id === parent.id))
+      .filter((product) => product.id === parent.id || product.parent_product_id === parent.id)
       .sort((a, b) => Number(b.id === parent.id) - Number(a.id === parent.id));
   };
-  const hasSaCategorySelected = inventoryItems.some((line) =>
-    products.find((product) => product.id === Number(line.category_id))?.name === "SA"
-  );
   useEffect(() => {
     if (canSelectReportStore) {
       api.get("/stores").then((response) => {
@@ -231,8 +222,8 @@ export default function Sales() {
       : (product?.sale_price || 0) * lineQuantity;
     return sum + lineTotal - (product?.purchase_price || 0) * lineQuantity;
   }, 0);
-  const total = inventoryTotal + (hasSaCategorySelected ? Number(servicesAmount || 0) : 0);
-  const profit = inventoryProfit + (hasSaCategorySelected ? Number(servicesAmount || 0) : 0);
+  const total = inventoryTotal;
+  const profit = inventoryProfit;
   const reportActuals = new Map(REPORT_ROWS.map((row) => [row.label, { quantity: 0, revenue: 0 }]));
   const reportAliases = new Map(
     REPORT_ROWS.flatMap((row) => row.aliases.map((alias) => [alias, row.label]))
@@ -241,8 +232,8 @@ export default function Sales() {
     const label = reportAliases.get((sale.product_name || "").trim().toLocaleLowerCase("ru-RU"));
     if (!label) return;
     const item = reportActuals.get(label);
-    const normalizedName = (sale.product_name || "").trim().toLocaleLowerCase("ru-RU");
-    if (!(["услуги", "услуга"].includes(normalizedName))) item.quantity += sale.quantity;
+    const isService = ["услуги", "услуга"].includes((sale.product_name || "").trim().toLocaleLowerCase("ru-RU"));
+    if (!isService) item.quantity += sale.quantity;
     item.revenue += Number(sale.total_amount || 0);
   });
   const reportPeriodLabel = reportPeriod === "day"
@@ -250,10 +241,10 @@ export default function Sales() {
     : (reportMonth ? `${reportMonth.slice(5, 7)}.${reportMonth.slice(0, 4)}` : "");
   const ownSalesByProduct = new Map();
   reportSales.forEach((sale) => {
-    const legacyService = ["услуги", "услуга"].includes((sale.product_name || "").trim().toLocaleLowerCase("ru-RU"));
-    const productName = legacyService ? "SA" : sale.product_name;
+    const isService = ["услуги", "услуга"].includes((sale.product_name || "").trim().toLocaleLowerCase("ru-RU"));
+    const productName = isService ? "SA" : sale.product_name;
     const item = ownSalesByProduct.get(productName) || { quantity: 0, amount: 0 };
-    if (!legacyService) item.quantity += sale.quantity;
+    if (!isService) item.quantity += sale.quantity;
     item.amount += Number(sale.total_amount || 0);
     ownSalesByProduct.set(productName, item);
   });
@@ -265,7 +256,7 @@ export default function Sales() {
         .map(([name, item]) => `• ${name} — ${item.quantity} шт.; сумма ${item.amount.toFixed(2)} сом`)
       : ["За выбранный период продаж нет."]),
     "",
-    `Всего продано: ${reportSales.reduce((sum, sale) => sum + ( ["услуги", "услуга"].includes((sale.product_name || "").trim().toLocaleLowerCase("ru-RU")) ? 0 : sale.quantity), 0)} шт.`,
+    `Всего продано: ${reportSales.reduce((sum, sale) => sum + sale.quantity, 0)} шт.`,
   ].join("\n");
   const fullReportText = [
     "План/факт",
@@ -273,8 +264,8 @@ export default function Sales() {
     "O!Store Бета 2",
     ...REPORT_ROWS.map((row) => {
       const actual = reportActuals.get(row.label);
-      if (row.metric === "sa") return `${row.label}: ${row.plan}/ ${actual.quantity}шт (${Math.round(actual.revenue)} сом)`;
-      if (row.metric === "revenue") return `${row.label}: ${row.plan}/ ${Math.round(actual.revenue)}`;
+      if (row.metric === "sa") return `${row.label}: ${actual.quantity} шт.; сумма SA (услуги) ${Math.round(actual.revenue)} сом`;
+      if (row.metric === "revenue") return `${row.label}: ${row.plan}/ ${Math.round(actual.revenue)} сом`;
       if (row.metric === "accessories") return `${row.label}: ${row.plan}/ ${actual.quantity}шт (${Math.round(actual.revenue)})`;
       if (row.metric === "devices") return `${row.label}: ${row.plan} \\ ${actual.quantity}`;
       if (row.metric === "family") return `${row.label}-${actual.quantity}`;
@@ -376,7 +367,10 @@ export default function Sales() {
       const saleDateIso = new Date(saleDate).toISOString();
       const saCategoryQuantity = inventoryItems.reduce((quantity, line) => {
         const category = products.find((product) => product.id === Number(line.category_id));
-        return category?.name === "SA" ? quantity + Number(line.quantity || 0) : quantity;
+        const selectedProduct = products.find((product) => product.id === Number(line.product_id));
+        return category?.name === "SA" && selectedProduct?.name !== "Услуги"
+          ? quantity + Number(line.quantity || 0)
+          : quantity;
       }, 0);
       const directSaQuantity = inventoryItems.reduce((quantity, line) => {
         const product = products.find((item) => item.id === Number(line.product_id));
@@ -393,14 +387,7 @@ export default function Sales() {
       if (saParentFact > 0 && saProduct) {
         saleItems.push({ product_id: saProduct.id, quantity: saParentFact, total_amount: 0 });
       }
-      if (hasSaCategorySelected && servicesAmount !== "" && saProduct) {
-        const saSaleItem = saleItems.find((item) => item.product_id === saProduct.id);
-        if (saSaleItem) {
-          saSaleItem.total_amount = Number(saSaleItem.total_amount || 0) + Number(servicesAmount);
-        } else {
-          saleItems.push({ product_id: saProduct.id, quantity: 1, total_amount: Number(servicesAmount) });
-        }
-      }
+
       const payload = {
         sale_date: saleDateIso,
         items: saleItems,
@@ -408,7 +395,6 @@ export default function Sales() {
       const response = await api.post("/sales/bulk", payload);
       setMessage(`Продажа сохранена. Товарных позиций: ${response.data.length}`);
       setInventoryItems([{ category_id: "", product_id: "", quantity: 1, total_amount: "" }]);
-      setServicesAmount("");
       await loadProducts();
       if (historyOpen) await loadHistory();
     } catch (err) {
@@ -484,7 +470,6 @@ export default function Sales() {
             <select value={saleStoreId} onChange={(event) => {
               setSaleStoreId(event.target.value);
               setInventoryItems([{ category_id: "", product_id: "", quantity: 1, total_amount: "" }]);
-              setServicesAmount("");
             }} required>
               {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
             </select>
@@ -551,13 +536,15 @@ export default function Sales() {
                   <label>
                     {products.find((product) => product.id === Number(line.product_id))?.name === "Аксессуары"
                       ? "Факт суммы аксессуаров, сом"
+                      : products.find((product) => product.id === Number(line.product_id))?.name === "Услуги"
+                        ? "Факт суммы услуг SA, сом"
                       : "Факт, сумма (необязательно)"}
                     <input
                       type="number"
                       min="0"
                       step="0.01"
                       placeholder="Введите сумму продаж"
-                      required={["Аксессуары"].includes(
+                      required={["Аксессуары", "Услуги"].includes(
                         products.find((product) => product.id === Number(line.product_id))?.name
                       )}
                       value={line.total_amount}
@@ -577,17 +564,6 @@ export default function Sales() {
                   </button>
                 </div>
               ))}
-              {hasSaCategorySelected && <label>
-                Факт суммы услуг включается в сумму SA, сом
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="Введите сумму услуг"
-                  value={servicesAmount}
-                  onChange={(event) => setServicesAmount(event.target.value)}
-                />
-              </label>}
               <button
                 type="button"
                 onClick={() => setInventoryItems([
@@ -715,7 +691,9 @@ export default function Sales() {
                     sales.map((sale) => (
                       <tr key={sale.id}>
                         <td>{new Date(sale.sale_date).toLocaleTimeString("ru-RU")}</td>
-                        <td>{sale.product_name || "Товар недоступен"}</td>
+                        <td>{["услуги", "услуга"].includes((sale.product_name || "").trim().toLocaleLowerCase("ru-RU"))
+                          ? "SA — услуги (сумма)"
+                          : sale.product_name || "Товар недоступен"}</td>
                         <td>{sale.quantity}</td>
                         <td>{sale.total_amount} сом</td>
                         <td>{sale.profit} сом</td>

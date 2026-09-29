@@ -72,7 +72,6 @@ export default function Goals() {
                   const product = catalog.find((item) => item.name === name);
                   if (!product) return [];
                   const assigned = goals.find((goal) => goal.product_id === product.id);
-                  const legacyServicesGoal = goals.find((goal) => goal.product_name === "Услуги");
                   const defaults = PLAN_FACT_DEFAULTS[name];
                   const defaultQuantityGoal = defaults?.metric === "quantity" ? defaults.goal : 0;
                   const defaultRevenueGoal = defaults?.metric === "revenue" ? defaults.goal : 0;
@@ -81,10 +80,7 @@ export default function Goals() {
                     product_id: product.id,
                     product_name: assigned?.product_name || product.name,
                     quantity_goal: assigned?.quantity_goal ?? defaultQuantityGoal,
-                    revenue_goal: name === "SA"
-                      ? Number(assigned?.revenue_goal ?? (legacyServicesGoal ? 0 : defaults?.revenueGoal ?? 0))
-                        + Number(legacyServicesGoal?.revenue_goal ?? 0)
-                      : assigned?.revenue_goal ?? defaultRevenueGoal,
+                    revenue_goal: assigned?.revenue_goal ?? defaultRevenueGoal,
                   };
                   const actual = actualByProduct[product.id] || {};
                   const quantityPercent = percent(actual.sold_quantity || 0, Number(goal.quantity_goal));

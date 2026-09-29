@@ -3,6 +3,7 @@
 PLAN_FACT_ITEMS = (
     {"name": "SA", "parent": None, "metric": "quantity", "quantity_goal": 30, "revenue_goal": 0},
     {"name": "Мой", "parent": "SA", "metric": "quantity", "quantity_goal": 25, "revenue_goal": 0},
+    {"name": "Услуги", "parent": "SA", "metric": "revenue", "quantity_goal": 0, "revenue_goal": 15000},
     {"name": "Карты", "parent": None, "metric": "quantity", "quantity_goal": 25, "revenue_goal": 0},
     {"name": "Устройства", "parent": None, "metric": "quantity", "quantity_goal": 2, "revenue_goal": 0},
     {"name": "Saima", "parent": None, "metric": "quantity", "quantity_goal": 1, "revenue_goal": 0},
