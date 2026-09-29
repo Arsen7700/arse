@@ -136,12 +136,13 @@ export default function Sales() {
   });
   const saleCategories = [
     ...categories
-      .filter((category) => plannedProductsByCategory.has(String(category.id)))
       .map((category) => ({
         value: String(category.id),
-        label: `${category.name} · ${plannedProductsByCategory.get(String(category.id))} с план-фактом`,
+        label: plannedProductsByCategory.has(String(category.id))
+          ? `${category.name} · ${plannedProductsByCategory.get(String(category.id))} товаров с план-фактом`
+          : `${category.name} · план-факт не назначен`,
       }))
-      .sort((a, b) => a.label.localeCompare(b.label, "ru")),
+      .sort((a, b) => a.value.localeCompare(b.value, "ru", { numeric: true })),
     ...(plannedProductsByCategory.has("uncategorized")
       ? [{
         value: "uncategorized",
@@ -481,7 +482,13 @@ export default function Sales() {
                       ))}
                       required
                     >
-                      <option value="">{line.category_id ? "Выберите товар с план-фактом" : "Сначала выберите категорию"}</option>
+                      <option value="">
+                        {!line.category_id
+                          ? "Сначала выберите категорию"
+                          : productsForCategory(line.category_id).length
+                            ? "Выберите товар с план-фактом"
+                            : "В этой категории нет товаров с план-фактом"}
+                      </option>
                       {productsForCategory(line.category_id).map((product) => (
                         <option key={product.id} value={product.id}>
                           {product.name} — остаток: {product.quantity}
