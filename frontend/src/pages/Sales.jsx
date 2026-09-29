@@ -129,13 +129,26 @@ export default function Sales() {
     api.get("/categories").then((response) => setCategories(response.data)).catch(() => {});
   }, [saleMonth]);
 
-  const saleCategories = [...new Map(products.map((product) => {
+  const plannedProductsByCategory = new Map();
+  products.forEach((product) => {
     const key = product.category_id == null ? "uncategorized" : String(product.category_id);
-    const label = product.category_id == null
-      ? "Без категории"
-      : categories.find((category) => category.id === product.category_id)?.name || "Категория";
-    return [key, { value: key, label }];
-  })).values()];
+    plannedProductsByCategory.set(key, (plannedProductsByCategory.get(key) || 0) + 1);
+  });
+  const saleCategories = [
+    ...categories
+      .filter((category) => plannedProductsByCategory.has(String(category.id)))
+      .map((category) => ({
+        value: String(category.id),
+        label: `${category.name} · ${plannedProductsByCategory.get(String(category.id))} с план-фактом`,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, "ru")),
+    ...(plannedProductsByCategory.has("uncategorized")
+      ? [{
+        value: "uncategorized",
+        label: `Без категории · ${plannedProductsByCategory.get("uncategorized")} с план-фактом`,
+      }]
+      : []),
+  ];
 
   const productsForCategory = (categoryId) => products.filter((product) =>
     (product.category_id == null ? "uncategorized" : String(product.category_id)) === String(categoryId)
@@ -446,7 +459,7 @@ export default function Sales() {
               {inventoryItems.map((line, index) => (
                 <div className="inventory-sale-line" key={index}>
                   <label>
-                    Категория
+                    Категория с план-фактом
                     <select
                       value={line.category_id}
                       onChange={(event) => setInventoryItems(inventoryItems.map((item, itemIndex) =>
@@ -454,7 +467,7 @@ export default function Sales() {
                       ))}
                       required
                     >
-                      <option value="">Выберите категорию</option>
+                      <option value="">Выберите категорию с план-фактом</option>
                       {saleCategories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
                     </select>
                   </label>
