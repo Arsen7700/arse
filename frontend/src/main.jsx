@@ -6,8 +6,8 @@ import "./styles.css";
 
 const telegramWebApp = window.Telegram?.WebApp;
 telegramWebApp?.ready();
-telegramWebApp?.setHeaderColor?.("#111827");
-telegramWebApp?.setBackgroundColor?.("#0b1220");
+telegramWebApp?.setHeaderColor?.("#0a1831");
+telegramWebApp?.setBackgroundColor?.("#071126");
 
 if (telegramWebApp) {
   // Keep Telegram's minimize/close swipe from intercepting vertical page scrolling.

@@ -875,6 +875,158 @@ tbody tr:hover { background: rgba(255, 255, 255, .025); }
 .daily-report-settings label { display: grid; gap: 6px; color: #aeb4bf; font-size: 13px; }
 .daily-report-settings button { grid-column: 1 / -1; justify-self: start; }
 
+/* Deep navy dashboard theme inspired by the supplied admin-panel reference. */
+:root {
+  color: #edf3ff;
+  background: #071126;
+  color-scheme: dark;
+}
+
+body {
+  background:
+    radial-gradient(ellipse at 70% -15%, rgba(35, 93, 211, .2), transparent 42rem),
+    radial-gradient(ellipse at 8% 52%, rgba(22, 60, 136, .12), transparent 35rem),
+    #071126;
+}
+
+.app-shell { background: transparent; }
+
+.sidebar {
+  background: linear-gradient(180deg, rgba(10, 24, 52, .99), rgba(7, 17, 38, .99));
+  border-right-color: #1a2d50;
+}
+
+.brand-mark {
+  border-radius: 14px;
+  background: linear-gradient(145deg, #49a0ff, #1762eb 72%);
+  box-shadow: 0 10px 28px rgba(24, 99, 235, .32);
+}
+
+.sidebar a { color: #a9b9d6; }
+.sidebar a:hover { background: rgba(39, 86, 160, .2); color: #fff; }
+.sidebar a.active {
+  background: linear-gradient(110deg, #2166dd, #174eb6);
+  box-shadow: 0 8px 22px rgba(22, 85, 205, .26);
+}
+
+.content { width: min(100%, 1600px); }
+.account-chip {
+  width: fit-content;
+  margin-left: auto;
+  padding: 6px 12px 6px 7px;
+  border: 1px solid #1d3155;
+  border-radius: 999px;
+  background: rgba(11, 27, 58, .72);
+  color: #d7e4fb;
+}
+.account-avatar {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  background: linear-gradient(145deg, #3992ff, #1b5bd4);
+}
+
+h1, h2, h3 { color: #f2f6ff; }
+.page-header h1 { letter-spacing: -.9px; }
+.page-header .muted { color: #9eafd0; }
+.muted { color: #9aaccb; }
+.small { color: #8499bc; }
+
+.card {
+  border-color: #1b3158;
+  background: linear-gradient(145deg, rgba(12, 29, 62, .97), rgba(9, 22, 47, .98));
+  box-shadow: 0 16px 38px rgba(1, 8, 24, .3), inset 0 1px rgba(167, 199, 255, .035);
+}
+.section-title { color: #eff5ff; }
+
+.dashboard-kpis {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 2px 0 20px;
+}
+.dashboard-kpis .stat-card {
+  position: relative;
+  min-height: 150px;
+  overflow: hidden;
+  padding: 20px;
+  border-color: #203963;
+  background: linear-gradient(145deg, #102750, #0b1c3a 78%);
+}
+.dashboard-kpis .stat-card::after {
+  position: absolute;
+  top: -35px;
+  right: -25px;
+  width: 115px;
+  height: 115px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(59, 130, 246, .2), transparent 70%);
+  content: "";
+  pointer-events: none;
+}
+.dashboard-kpis .stat-card:nth-child(2) { background: linear-gradient(145deg, #0d2d3d, #0b1d35 78%); }
+.dashboard-kpis .stat-card:nth-child(3) { background: linear-gradient(145deg, #1c2050, #111b3c 78%); }
+.dashboard-kpis .stat-card:nth-child(4) { background: linear-gradient(145deg, #32253c, #171c35 78%); }
+.dashboard-kpis .stat-value {
+  margin: 16px 0 6px;
+  color: #fff;
+  font-size: clamp(23px, 2.2vw, 32px);
+  letter-spacing: -.7px;
+}
+
+input, select, textarea {
+  border-color: #263d65;
+  background: #0a1831;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: #4a94ff;
+  outline-color: rgba(57, 132, 255, .2);
+}
+button { border-color: #29436e; background: #14294d; }
+button.primary {
+  border-color: #2875f6;
+  background: linear-gradient(135deg, #3b8dff, #1e5de0);
+  box-shadow: 0 8px 20px rgba(28, 92, 214, .24);
+}
+button.danger { background: #632b3a; border-color: #814052; }
+
+.table-wrap { border-color: #1d3155; }
+table { min-width: 620px; }
+th {
+  color: #a9bedf;
+  background: rgba(25, 51, 91, .38);
+}
+th, td { border-bottom-color: #1b2e50; }
+tbody tr:hover { background: rgba(49, 103, 183, .09); }
+
+.inventory-sale-line,
+.history-edit-form,
+.telegram-settings,
+.summary-box {
+  border-color: #1d345d;
+  background: rgba(8, 23, 49, .8);
+}
+.progress { background: #14294c; }
+.progress-fill { background: linear-gradient(90deg, #337fff, #42b8ff); }
+.notice { background: #0d302e; border-color: #1d665f; }
+.sales-history-modal {
+  border-color: #29436e;
+  background: #0b1831;
+}
+
+@media (max-width: 900px) {
+  .dashboard-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 650px) {
+  .sidebar {
+    border-color: #26395c;
+    background: rgba(8, 22, 47, .97);
+  }
+  .sidebar a.active { color: #8fc1ff; background: rgba(36, 100, 207, .2); }
+  .dashboard-kpis { gap: 10px; }
+  .dashboard-kpis .stat-card { min-height: 124px; padding: 15px; }
+  .dashboard-kpis .stat-value { margin-top: 12px; font-size: 22px; }
+}
+
 @media (max-width: 650px) {
   .account-chip { margin: -5px 2px 12px; font-size: 12px; }
   .admin-create-row { flex-direction: column; }

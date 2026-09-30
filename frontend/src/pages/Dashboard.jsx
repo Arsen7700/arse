@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api";
 import { PLAN_FACT_ITEMS } from "../planFact";
+import StatCard from "../components/StatCard";
 
 const money = (value) => `${Number(value || 0).toLocaleString("ru-RU")} сом`;
 const localDateValue = (date) => {
@@ -85,6 +86,7 @@ export default function Dashboard() {
   const dailyProducts = [...dailyStats.values()].sort((a, b) =>
     a.product_name.localeCompare(b.product_name, "ru")
   );
+  const monthRevenue = (data?.per_product || []).reduce((sum, item) => sum + Number(item.revenue || 0), 0);
 
   if (!data) return <div>Загрузка...</div>;
 
@@ -92,8 +94,8 @@ export default function Dashboard() {
     <>
       <div className="page-header">
         <div>
-          <h1>Dashboard</h1>
-          <p className="muted">Фактические продажи по показателям план-факта</p>
+          <h1>Обзор продаж</h1>
+          <p className="muted">Показатели и динамика за {String(month).padStart(2, "0")}.{year}</p>
         </div>
 
         <div className="row">
@@ -111,6 +113,13 @@ export default function Dashboard() {
           </select>
         </div>
       </div>
+
+      <section className="stats-grid dashboard-kpis" aria-label="Сводка за месяц">
+        <StatCard title="Продано по плану-факту" value={`${Number(data.sold_quantity || 0).toLocaleString("ru-RU")} шт.`} subtitle="За выбранный месяц" />
+        <StatCard title="Выручка" value={money(monthRevenue)} subtitle="По зарегистрированным продажам" />
+        <StatCard title="Прибыль" value={money(data.profit)} subtitle="За выбранный месяц" />
+        <StatCard title="Остаток товаров" value={Number(data.stock_quantity || 0).toLocaleString("ru-RU")} subtitle="Единиц на складе" />
+      </section>
 
       <div className="card">
         <div className="section-title">Статистика по товарам из план-факта за месяц</div>
