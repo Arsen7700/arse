@@ -1,5 +1,5 @@
 export const PLAN_FACT_GROUPS = [
-  { name: "SA", children: ["Мой", "Услуги"] },
+  { name: "SA", children: ["Мой"] },
   { name: "Карты", children: [] },
   { name: "Устройства", children: [] },
   { name: "Saima", children: [] },
@@ -17,7 +17,6 @@ export const PLAN_FACT_ITEMS = PLAN_FACT_GROUPS.flatMap(({ name, children }) => 
 export const PLAN_FACT_DEFAULTS = {
   SA: { metric: "quantity", goal: 30 },
   Мой: { metric: "quantity", goal: 25 },
-  Услуги: { metric: "revenue", goal: 15000 },
   Карты: { metric: "quantity", goal: 25 },
   Устройства: { metric: "quantity", goal: 2 },
   Saima: { metric: "quantity", goal: 1 },

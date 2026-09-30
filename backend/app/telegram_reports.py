@@ -16,9 +16,10 @@ REPORT_ROWS = (
     (
         "SA",
         30,
-        "sa",
-        ("sa", "sim-карта", "sim карта", "сим-карта", "сим карта", "сим-карты", "услуги", "услуга"),
+        "quantity",
+        ("sa", "sim-карта", "sim карта", "сим-карта", "сим карта", "сим-карты"),
     ),
+    ("Услуги", 15000, "revenue", ("услуги", "услуга")),
     ("Мой", 25, "quantity", ("мой", "мой!")),
     (
         "Карты",
@@ -120,11 +121,23 @@ def build_personal_sales_report(
         if not is_service:
             item["quantity"] += sale.quantity
         item["amount"] += Decimal(str(sale.total_amount))
+        is_sa_sale = (sale.product_name or "").strip().casefold() in {
+            "sa", "sim-карта", "sim карта", "сим-карта", "сим карта", "сим-карты"
+        }
+        if is_sa_sale:
+            services = grouped.setdefault(
+                "Услуги", {"quantity": 0, "amount": Decimal("0")}
+            )
+            services["amount"] += Decimal(str(sale.total_amount))
 
     lines = [title]
     if grouped:
         lines.extend(
-            f"• {name} — {item['quantity']} шт.; сумма {item['amount']:.2f} сом"
+            (
+                f"• {name} — {item['quantity']} шт."
+                if name == "Мой"
+                else f"• {name} — {item['quantity']} шт.; сумма {item['amount']:.2f} сом"
+            )
             for name, item in sorted(grouped.items(), key=lambda row: row[0].casefold())
         )
     else:
@@ -147,7 +160,9 @@ def _format_report(title: str, sales: list, empty_message: str, settings=None) -
         for label, _plan, _metric, _aliases in REPORT_ROWS
     }
     for sale in sales:
-        mapped = normalized_aliases.get((sale.product_name or "").strip().casefold())
+        sale_name = (sale.product_name or "").strip().casefold()
+        is_sa_sale = sale_name in {"sa", "sim-карта", "sim карта", "сим-карта", "сим карта", "сим-карты"}
+        mapped = normalized_aliases.get(sale_name)
         if mapped is None:
             continue
         label, _metric = mapped
@@ -156,16 +171,14 @@ def _format_report(title: str, sales: list, empty_message: str, settings=None) -
         if not is_service:
             item["quantity"] += sale.quantity
         item["revenue"] += Decimal(str(sale.total_amount))
+        if is_sa_sale:
+            actuals["Услуги"]["revenue"] += Decimal(str(sale.total_amount))
 
     report_date = title.removeprefix("Отчёт о продажах за ")
     lines = ["План/факт", report_date, "O!Store Бета 2"]
     for label, plan, metric, _aliases in REPORT_ROWS:
         item = actuals[label]
-        if metric == "sa":
-            lines.append(
-                f"{label}: {item['quantity']} шт.; сумма SA (услуги) {item['revenue']:.0f} сом"
-            )
-        elif metric == "revenue":
+        if metric == "revenue":
             fact = f"{item['revenue']:.0f}"
             lines.append(f"{label}: {plan}/ {fact}")
         elif metric == "accessories":
