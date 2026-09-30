@@ -1012,6 +1012,23 @@ tbody tr:hover { background: rgba(49, 103, 183, .09); }
   background: #0b1831;
 }
 
+.standalone-tool-container {
+  display: block;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+}
+.standalone-tool-card {
+  width: 100%;
+  max-height: none;
+  overflow: visible;
+  padding: 22px;
+  border: 1px solid #1b3158;
+  border-radius: 20px;
+  background: linear-gradient(145deg, rgba(12, 29, 62, .97), rgba(9, 22, 47, .98));
+  box-shadow: 0 16px 38px rgba(1, 8, 24, .3);
+}
+
 @media (max-width: 900px) {
   .dashboard-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -1025,6 +1042,17 @@ tbody tr:hover { background: rgba(49, 103, 183, .09); }
   .dashboard-kpis { gap: 10px; }
   .dashboard-kpis .stat-card { min-height: 124px; padding: 15px; }
   .dashboard-kpis .stat-value { margin-top: 12px; font-size: 22px; }
+  .standalone-tool-card { padding: 16px 14px; border-radius: 18px; }
+  .sidebar nav.nav-count-6,
+  .sidebar nav.nav-count-7 {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .sidebar nav.nav-count-6::-webkit-scrollbar,
+  .sidebar nav.nav-count-7::-webkit-scrollbar { display: none; }
+  .sidebar nav.nav-count-6 a,
+  .sidebar nav.nav-count-7 a { flex: 0 0 68px; }
 }
 
 @media (max-width: 650px) {

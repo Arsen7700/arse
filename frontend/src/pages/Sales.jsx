@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { PLAN_FACT_GROUPS } from "../planFact";
@@ -59,6 +60,11 @@ const dateAtTimezoneUtc = (dateValue, timezone) => {
 };
 
 export default function Sales() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isHistoryPage = location.pathname === "/history";
+  const isReportsPage = location.pathname === "/reports";
+  const isStandaloneToolPage = isHistoryPage || isReportsPage;
   const user = useAuth();
   const readOnly = false;
   const isLead = user?.role === "lead";
@@ -80,10 +86,10 @@ export default function Sales() {
   const [message, setMessage] = useState("");
   const [historyMessage, setHistoryMessage] = useState("");
   const [editingSale, setEditingSale] = useState(null);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(isHistoryPage);
   const [historyDate, setHistoryDate] = useState(() => localDateInputValue(new Date()));
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [reportOpen, setReportOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(isReportsPage);
   const [reportPeriod, setReportPeriod] = useState("day");
   const [reportDate, setReportDate] = useState(() => localDateInputValue(new Date()));
   const [reportMonth, setReportMonth] = useState(() => localMonthInputValue(new Date()));
@@ -101,6 +107,11 @@ export default function Sales() {
     timezone: "Asia/Almaty",
   });
   const saleMonth = saleDate.slice(0, 7);
+
+  useEffect(() => {
+    setHistoryOpen(isHistoryPage);
+    setReportOpen(isReportsPage);
+  }, [isHistoryPage, isReportsPage]);
 
   const loadProducts = async () => {
     const [year, month] = saleMonth.split("-").map(Number);
@@ -473,22 +484,22 @@ export default function Sales() {
 
   return (
     <>
-      <div className="page-header">
+      {isStandaloneToolPage && <div className="page-header">
+        <div>
+          <h1>{isHistoryPage ? "История продаж" : "Отчёты"}</h1>
+          <p className="muted">{isHistoryPage ? "Просмотр и управление продажами за выбранный день" : "Просмотр и отправка отчётов за выбранный период"}</p>
+        </div>
+      </div>}
+
+      {!isStandaloneToolPage && <div className="page-header">
         <div>
           <h1>Продажи</h1>
           <p className="muted">{isLead ? "Регистрация факта по показателям план-факта в лавочках" : "Регистрация факта по показателям план-факта"}</p>
         </div>
-        <div className="row sales-page-actions">
-          <button type="button" onClick={() => setHistoryOpen(true)}>
-            История продаж
-          </button>
-          <button type="button" className="primary" onClick={() => setReportOpen(true)}>
-            Отчёт для Telegram
-          </button>
-        </div>
       </div>
+      }
 
-      {!readOnly && <div className="card">
+      {!readOnly && !isStandaloneToolPage && <div className="card">
         <form className="form-grid" onSubmit={submit}>
           {canSelectSaleStore && <label>
             Лавочка продаж
@@ -634,16 +645,16 @@ export default function Sales() {
 
       {historyOpen && (
         <div
-          className="modal-backdrop"
-          role="presentation"
+          className={isStandaloneToolPage ? "standalone-tool-container" : "modal-backdrop"}
+          role={isStandaloneToolPage ? undefined : "presentation"}
           onClick={(event) => {
-            if (event.target === event.currentTarget) {
+            if (!isStandaloneToolPage && event.target === event.currentTarget) {
               setHistoryOpen(false);
               setEditingSale(null);
             }
           }}
         >
-          <section className="sales-history-modal" role="dialog" aria-modal="true" aria-labelledby="sales-history-title">
+          <section className={isStandaloneToolPage ? "standalone-tool-card" : "sales-history-modal"} role={isStandaloneToolPage ? "region" : "dialog"} aria-modal={!isStandaloneToolPage} aria-labelledby="sales-history-title">
             <div className="modal-header">
               <div>
                 <h2 id="sales-history-title">История продаж</h2>
@@ -655,6 +666,7 @@ export default function Sales() {
                 onClick={() => {
                   setHistoryOpen(false);
                   setEditingSale(null);
+                  if (isHistoryPage) navigate("/sales");
                 }}
               >
                 Закрыть
@@ -755,19 +767,22 @@ export default function Sales() {
 
       {reportOpen && (
         <div
-          className="modal-backdrop"
-          role="presentation"
+          className={isStandaloneToolPage ? "standalone-tool-container" : "modal-backdrop"}
+          role={isStandaloneToolPage ? undefined : "presentation"}
           onClick={(event) => {
-            if (event.target === event.currentTarget) setReportOpen(false);
+            if (!isStandaloneToolPage && event.target === event.currentTarget) setReportOpen(false);
           }}
         >
-          <section className="sales-history-modal report-modal" role="dialog" aria-modal="true" aria-labelledby="sales-report-title">
+          <section className={`${isStandaloneToolPage ? "standalone-tool-card" : "sales-history-modal"} report-modal`} role={isStandaloneToolPage ? "region" : "dialog"} aria-modal={!isStandaloneToolPage} aria-labelledby="sales-report-title">
             <div className="modal-header">
               <div>
                 <h2 id="sales-report-title">Отчёт для Telegram</h2>
                 <p className="muted">Отчёт по проданным товарам за выбранный день или месяц.</p>
               </div>
-              <button type="button" onClick={() => setReportOpen(false)}>Закрыть</button>
+              <button type="button" onClick={() => {
+                setReportOpen(false);
+                if (isReportsPage) navigate("/sales");
+              }}>Закрыть</button>
             </div>
 
             <label className="report-date-label">
