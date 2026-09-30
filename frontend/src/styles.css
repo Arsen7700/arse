@@ -1078,6 +1078,20 @@ label, .muted, .small, td, th, .notice, .section-title {
 .table-wrap { max-width: 100%; overscroll-behavior-x: contain; }
 .report-text { width: 100%; min-width: 0; }
 .modal-header > *, .history-toolbar > * { min-width: 0; max-width: 100%; }
+input[type="date"],
+input[type="month"],
+input[type="datetime-local"] {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.history-toolbar label,
+.report-date-label,
+.history-toolbar > div {
+  min-width: 0;
+  max-width: 100%;
+}
 
 @media (max-width: 480px) {
   .content { padding-right: 11px; padding-left: 11px; }
@@ -1096,7 +1110,12 @@ label, .muted, .small, td, th, .notice, .section-title {
   .modal-backdrop { padding-right: 6px; padding-left: 6px; }
   .sales-history-modal { padding-right: 10px; padding-left: 10px; }
   .history-toolbar, .modal-header { gap: 10px; }
-  .history-toolbar input { min-width: 0; }
+  .history-toolbar label,
+  .history-toolbar > div,
+  .report-date-label { width: 100%; min-width: 0; max-width: 100%; }
+  .history-toolbar input[type="date"],
+  .report-date-label input[type="date"],
+  .report-date-label input[type="month"] { width: 100%; min-width: 0; max-width: 100%; padding-right: 10px; }
   .report-actions > * { flex: 1 1 100%; }
   .daily-report-settings { padding: 11px; }
   .standalone-tool-card { padding: 13px 10px; }
