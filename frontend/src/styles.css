@@ -1055,6 +1055,62 @@ tbody tr:hover { background: rgba(49, 103, 183, .09); }
   .sidebar nav.nav-count-7 a { flex: 0 0 68px; }
 }
 
+/* Responsive overflow guardrails for compact phones and embedded Telegram views. */
+html, body, #root { width: 100%; }
+body { overflow-x: hidden; }
+.app-shell, .content, .card, .form-grid, .inventory-sale-line,
+.daily-report-settings, .team-report-filters, .page-header, .row {
+  min-width: 0;
+}
+.content { overflow-x: clip; }
+.form-grid > *, .inventory-sale-line > *, .daily-report-settings > *,
+.team-report-filters > *, .page-header > *, .row > * {
+  min-width: 0;
+  max-width: 100%;
+}
+input, select, textarea, button { min-width: 0; max-width: 100%; }
+button { line-height: 1.25; overflow-wrap: anywhere; }
+label, .muted, .small, td, th, .notice, .section-title {
+  overflow-wrap: anywhere;
+}
+.account-chip { max-width: 100%; }
+.account-chip > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.table-wrap { max-width: 100%; overscroll-behavior-x: contain; }
+.report-text { width: 100%; min-width: 0; }
+.modal-header > *, .history-toolbar > * { min-width: 0; max-width: 100%; }
+
+@media (max-width: 480px) {
+  .content { padding-right: 11px; padding-left: 11px; }
+  .page-header h1 { font-size: clamp(22px, 7vw, 27px); }
+  .page-header .row { gap: 8px; }
+  .page-header .row > * { flex: 1 1 105px; }
+  .card { padding: 14px 12px; }
+  .dashboard-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .dashboard-kpis .stat-card { padding: 12px 10px; }
+  .dashboard-kpis .stat-value { font-size: clamp(17px, 5.2vw, 22px); overflow-wrap: anywhere; }
+  .table-wrap { border-radius: 11px; }
+  table { min-width: 560px; }
+  th, td { padding: 10px 8px; }
+  .actions { min-width: 120px; }
+  .actions button { flex: 1 1 100%; }
+  .modal-backdrop { padding-right: 6px; padding-left: 6px; }
+  .sales-history-modal { padding-right: 10px; padding-left: 10px; }
+  .history-toolbar, .modal-header { gap: 10px; }
+  .history-toolbar input { min-width: 0; }
+  .report-actions > * { flex: 1 1 100%; }
+  .daily-report-settings { padding: 11px; }
+  .standalone-tool-card { padding: 13px 10px; }
+}
+
+@media (max-width: 350px) {
+  .content { padding-right: 8px; padding-left: 8px; }
+  .card { padding-right: 10px; padding-left: 10px; }
+  .sidebar { right: 8px; left: 8px; }
+  .sidebar nav.nav-count-5 { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+  .sidebar nav.nav-count-5 a { font-size: 8px; }
+  .account-chip { font-size: 11px; }
+}
+
 @media (max-width: 650px) {
   .account-chip { margin: -5px 2px 12px; font-size: 12px; }
   .admin-create-row { flex-direction: column; }
