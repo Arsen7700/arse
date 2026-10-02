@@ -247,6 +247,27 @@ def require_sale_access(db: Session, sale_id: int, user: CurrentUser) -> models.
     return sale
 
 
+def invalidate_saved_reports_for_sale(db: Session, store_id: int, sale_date: datetime) -> None:
+    schedule = db.get(models.TelegramSchedule, 1)
+    try:
+        zone = ZoneInfo(schedule.timezone if schedule else "Asia/Almaty")
+    except ZoneInfoNotFoundError:
+        zone = timezone.utc
+    sale_datetime = sale_date
+    if sale_datetime.tzinfo is None:
+        sale_datetime = sale_datetime.replace(tzinfo=timezone.utc)
+    local_date = sale_datetime.astimezone(zone).date()
+    keys = [
+        f"day:{local_date.isoformat()}:store-{store_id}",
+        f"month:{local_date:%Y-%m}:store-{store_id}",
+        f"day:{local_date.isoformat()}:store-all",
+        f"month:{local_date:%Y-%m}:store-all",
+    ]
+    db.query(models.SavedReportText).filter(
+        models.SavedReportText.report_key.in_(keys)
+    ).delete(synchronize_session=False)
+
+
 @app.get("/auth/me")
 def get_current_account(user: CurrentUser = Depends(current_user)):
     return {
@@ -914,6 +935,7 @@ def create_sale(
             raise HTTPException(status_code=400, detail="Недостаточно товара на складе")
     db.add(sale)
     try:
+        invalidate_saved_reports_for_sale(db, sale.store_id, sale.sale_date)
         db.commit()
     except Exception:
         db.rollback()
@@ -996,6 +1018,8 @@ def create_bulk_inventory_sale(
             )
 
         db.add_all(created_sales)
+        for store_id in {sale.store_id for sale in created_sales}:
+            invalidate_saved_reports_for_sale(db, store_id, payload.sale_date)
         db.commit()
         for sale in created_sales:
             db.refresh(sale)
@@ -1014,6 +1038,7 @@ def update_sale(
     user: CurrentUser = Depends(require_roles("specialist", "cashier", "lead")),
 ):
     sale = require_sale_access(db, sale_id, user)
+    previous_sale_date = sale.sale_date
 
     data = payload.model_dump(exclude_unset=True)
     if "quantity" in data:
@@ -1064,6 +1089,8 @@ def update_sale(
             * sale.quantity
         ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     )
+    invalidate_saved_reports_for_sale(db, sale.store_id, previous_sale_date)
+    invalidate_saved_reports_for_sale(db, sale.store_id, sale.sale_date)
     db.commit()
     db.refresh(sale)
     return sale
@@ -1076,6 +1103,7 @@ def delete_sale(
     user: CurrentUser = Depends(require_roles("specialist", "cashier", "lead")),
 ):
     sale = require_sale_access(db, sale_id, user)
+    invalidate_saved_reports_for_sale(db, sale.store_id, sale.sale_date)
 
     product = db.get(models.Product, sale.product_id) if sale.product_id is not None else None
     if product is not None and not product.is_plan_fact:
