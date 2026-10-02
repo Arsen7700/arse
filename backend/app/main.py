@@ -398,6 +398,23 @@ def update_staff_account(
     }
 
 
+@app.delete("/admin/users/{telegram_id}")
+def delete_staff_account(
+    telegram_id: int,
+    db: Session = Depends(get_db),
+    _user: CurrentUser = Depends(require_roles("admin")),
+):
+    """Remove staff access without deleting sales history or account references."""
+    account = db.get(models.StaffAccount, telegram_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Сотрудник не найден")
+    if str(telegram_id) in configured_telegram_admin_ids():
+        raise HTTPException(status_code=409, detail="Первоначального администратора нельзя удалить")
+    account.is_active = False
+    db.commit()
+    return {"ok": True, "message": "Доступ сотрудника удалён; история продаж сохранена."}
+
+
 @app.get("/team/staff", response_model=list[schemas.StaffAccountOut])
 def list_team_staff(
     db: Session = Depends(get_db),

@@ -79,6 +79,21 @@ export default function AdminPanel() {
     }
   };
 
+  const deleteStaff = async (person) => {
+    const confirmed = window.confirm(
+      `Удалить доступ сотрудника «${person.display_name}»? История его продаж сохранится.`,
+    );
+    if (!confirmed) return;
+    setError(""); setMessage("");
+    try {
+      await api.delete(`/admin/users/${person.telegram_id}`);
+      setMessage(`Доступ сотрудника «${person.display_name}» удалён; история продаж сохранена`);
+      await load();
+    } catch (requestError) {
+      setError(requestError.response?.data?.detail || "Не удалось удалить сотрудника");
+    }
+  };
+
   return (
     <>
       <div className="page-header"><div><h1>Панель администратора</h1><p className="muted">Лавочки, сотрудники и уровни доступа</p></div></div>
@@ -135,7 +150,10 @@ export default function AdminPanel() {
                   <td><select aria-label="Роль сотрудника" value={person.role} onChange={(event) => updateStaffField(person.telegram_id, "role", event.target.value)}>{Object.entries(roleNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></td>
                   <td><select aria-label="Лавочка сотрудника" value={person.store_id || ""} onChange={(event) => updateStaffField(person.telegram_id, "store_id", event.target.value)}><option value="">Все лавочки / не назначена</option>{stores.filter((store) => store.is_active).map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}</select></td>
                   <td><label className="admin-active-toggle"><input type="checkbox" checked={person.is_active} onChange={(event) => updateStaffField(person.telegram_id, "is_active", event.target.checked)} /> Активен</label></td>
-                  <td><button className="primary" type="button" onClick={() => saveStaff(person)}>Сохранить</button></td>
+                  <td><div className="admin-staff-actions">
+                    <button className="primary" type="button" onClick={() => saveStaff(person)}>Сохранить</button>
+                    <button className="danger" type="button" onClick={() => deleteStaff(person)}>Удалить</button>
+                  </div></td>
                 </tr>
               ))}
               {!staff.length && <tr><td colSpan="6">Сотрудники не добавлены.</td></tr>}
