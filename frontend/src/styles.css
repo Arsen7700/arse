@@ -226,6 +226,14 @@ button.danger {
   -webkit-overflow-scrolling: touch;
 }
 
+.team-accounts-table table { min-width: 840px; }
+.team-accounts-table th:nth-child(2),
+.team-accounts-table td:nth-child(2) {
+  min-width: 112px;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

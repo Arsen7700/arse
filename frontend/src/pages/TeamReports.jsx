@@ -212,7 +212,7 @@ export default function TeamReports() {
           <select value={newAccount.store_id} onChange={(event) => setNewAccount({ ...newAccount, store_id: event.target.value })} required><option value="">Выберите лавочку</option>{stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}</select>
           <button className="primary" type="submit">Добавить сотрудника</button>
         </form>
-        <div className="table-wrap">
+        <div className="table-wrap team-accounts-table">
           <table>
             <thead><tr><th>Сотрудник</th><th>Telegram ID</th><th>Роль</th><th>Лавочка</th><th>Действия</th></tr></thead>
             <tbody>
