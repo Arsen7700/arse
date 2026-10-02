@@ -6,6 +6,7 @@ const roleNames = { specialist: "Специалист", cashier: "Кассир",
 export default function AdminPanel() {
   const [stores, setStores] = useState([]);
   const [staff, setStaff] = useState([]);
+  const [showInactiveStaff, setShowInactiveStaff] = useState(false);
   const [storeName, setStoreName] = useState("");
   const [newStaff, setNewStaff] = useState({ telegram_id: "", display_name: "", role: "specialist", store_id: "" });
   const [message, setMessage] = useState("");
@@ -86,13 +87,15 @@ export default function AdminPanel() {
     if (!confirmed) return;
     setError(""); setMessage("");
     try {
-      await api.delete(`/admin/users/${person.telegram_id}`);
+      await api.put(`/admin/users/${person.telegram_id}`, { is_active: false });
       setMessage(`Доступ сотрудника «${person.display_name}» удалён; история продаж сохранена`);
       await load();
     } catch (requestError) {
       setError(requestError.response?.data?.detail || "Не удалось удалить сотрудника");
     }
   };
+
+  const visibleStaff = staff.filter((person) => showInactiveStaff || person.is_active);
 
   return (
     <>
@@ -139,11 +142,15 @@ export default function AdminPanel() {
 
       <section className="card">
         <div className="section-title">Сотрудники и доступ</div>
+        <label className="admin-active-toggle">
+          <input type="checkbox" checked={showInactiveStaff} onChange={(event) => setShowInactiveStaff(event.target.checked)} />
+          Показывать отключённых ({staff.filter((person) => !person.is_active).length})
+        </label>
         <div className="table-wrap">
           <table className="admin-staff-table">
             <thead><tr><th>Сотрудник</th><th>Telegram ID</th><th>Роль</th><th>Лавочка</th><th>Статус</th><th>Действие</th></tr></thead>
             <tbody>
-              {staff.map((person) => (
+              {visibleStaff.map((person) => (
                 <tr key={person.telegram_id}>
                   <td><input aria-label="Имя сотрудника" value={person.display_name} onChange={(event) => updateStaffField(person.telegram_id, "display_name", event.target.value)} /></td>
                   <td>{person.telegram_id}</td>
@@ -156,7 +163,7 @@ export default function AdminPanel() {
                   </div></td>
                 </tr>
               ))}
-              {!staff.length && <tr><td colSpan="6">Сотрудники не добавлены.</td></tr>}
+              {!visibleStaff.length && <tr><td colSpan="6">{staff.length ? "Активные сотрудники не найдены." : "Сотрудники не добавлены."}</td></tr>}
             </tbody>
           </table>
         </div>
