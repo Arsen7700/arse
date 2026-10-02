@@ -249,8 +249,8 @@ button.danger {
 
 /* Keep the admin staff table readable on narrow screens; the table wrapper scrolls horizontally. */
 .admin-staff-table {
-  width: 1060px;
-  min-width: 1060px;
+  width: 1130px;
+  min-width: 1130px;
   table-layout: fixed;
 }
 .admin-staff-table th:nth-child(1),
@@ -265,11 +265,11 @@ button.danger {
 .admin-staff-table th:nth-child(3),
 .admin-staff-table td:nth-child(3) { width: 160px; }
 .admin-staff-table th:nth-child(4),
-.admin-staff-table td:nth-child(4) { width: 230px; }
+.admin-staff-table td:nth-child(4) { width: 240px; }
 .admin-staff-table th:nth-child(5),
-.admin-staff-table td:nth-child(5) { width: 170px; }
+.admin-staff-table td:nth-child(5) { width: 190px; }
 .admin-staff-table th:nth-child(6),
-.admin-staff-table td:nth-child(6) { width: 170px; }
+.admin-staff-table td:nth-child(6) { width: 210px; }
 .admin-staff-table td:nth-child(5),
 .admin-staff-table td:nth-child(6),
 .admin-staff-table td:nth-child(6) button {
@@ -277,6 +277,14 @@ button.danger {
   overflow-wrap: normal;
   word-break: normal;
 }
+.admin-staff-table td:nth-child(5) .admin-active-toggle {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  white-space: nowrap;
+}
+.admin-staff-table td:nth-child(6) { padding-left: 22px; }
+.admin-staff-table td:nth-child(6) button { min-width: 128px; }
 
 table {
   width: 100%;
