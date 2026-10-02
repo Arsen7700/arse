@@ -226,13 +226,26 @@ button.danger {
   -webkit-overflow-scrolling: touch;
 }
 
-.team-accounts-table table { min-width: 840px; }
+.team-accounts-table table {
+  width: 840px;
+  min-width: 840px;
+  table-layout: fixed;
+}
+.team-accounts-table th:nth-child(1),
+.team-accounts-table td:nth-child(1) { width: 160px; }
 .team-accounts-table th:nth-child(2),
 .team-accounts-table td:nth-child(2) {
-  min-width: 112px;
+  width: 132px;
   white-space: nowrap;
   overflow-wrap: normal;
+  word-break: normal;
 }
+.team-accounts-table th:nth-child(3),
+.team-accounts-table td:nth-child(3) { width: 130px; }
+.team-accounts-table th:nth-child(4),
+.team-accounts-table td:nth-child(4) { width: 178px; }
+.team-accounts-table th:nth-child(5),
+.team-accounts-table td:nth-child(5) { width: 240px; }
 
 table {
   width: 100%;
