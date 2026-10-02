@@ -411,9 +411,9 @@ export default function Sales() {
       const saleItems = inventoryItems.map((line) => ({
         product_id: Number(line.product_id),
         quantity: Number(line.quantity),
-        total_amount: products.find((product) => product.id === Number(line.product_id))?.name === "Мой"
-          ? 0
-          : line.total_amount === "" ? undefined : Number(line.total_amount),
+        total_amount: products.find((product) => product.id === Number(line.product_id))?.name === "SA"
+          ? line.total_amount === "" ? undefined : Number(line.total_amount)
+          : products.find((product) => product.id === Number(line.product_id))?.name === "Мой" ? 0 : undefined,
       }));
       if (saParentFact > 0 && saProduct) {
         saleItems.push({ product_id: saProduct.id, quantity: saParentFact, total_amount: 0 });
@@ -524,6 +524,7 @@ export default function Sales() {
                           ...item,
                           category_id: event.target.value,
                           product_id: event.target.value,
+                          total_amount: "",
                         } : item
                       ))}
                       required
@@ -538,7 +539,7 @@ export default function Sales() {
                       value={line.product_id}
                       disabled={!line.category_id}
                       onChange={(event) => setInventoryItems(inventoryItems.map((item, itemIndex) =>
-                        itemIndex === index ? { ...item, product_id: event.target.value } : item
+                        itemIndex === index ? { ...item, product_id: event.target.value, total_amount: "" } : item
                       ))}
                       required
                     >
@@ -570,31 +571,21 @@ export default function Sales() {
                       required
                     />
                   </label>
-                  <label>
-                    {products.find((product) => product.id === Number(line.product_id))?.name === "Мой"
-                      ? "Мой — подарок, без суммы"
-                      : products.find((product) => product.id === Number(line.product_id))?.name === "Аксессуары"
-                      ? "Факт суммы аксессуаров, сом"
-                      : "Факт, сумма (необязательно)"}
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder={products.find((product) => product.id === Number(line.product_id))?.name === "Мой"
-                        ? "Подарок, сумма не учитывается"
-                        : "Введите сумму продаж"}
-                      disabled={products.find((product) => product.id === Number(line.product_id))?.name === "Мой"}
-                      required={["Аксессуары"].includes(
-                        products.find((product) => product.id === Number(line.product_id))?.name
-                      )}
-                      value={products.find((product) => product.id === Number(line.product_id))?.name === "Мой"
-                        ? 0
-                        : line.total_amount}
-                      onChange={(event) => setInventoryItems(inventoryItems.map((item, itemIndex) =>
-                        itemIndex === index ? { ...item, total_amount: event.target.value } : item
-                      ))}
-                    />
-                  </label>
+                  {products.find((product) => product.id === Number(line.product_id))?.name === "SA" && (
+                    <label>
+                      Факт суммы SA, сом
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Введите сумму SA"
+                        value={line.total_amount}
+                        onChange={(event) => setInventoryItems(inventoryItems.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, total_amount: event.target.value } : item
+                        ))}
+                      />
+                    </label>
+                  )}
                   <button
                     type="button"
                     className="danger"
