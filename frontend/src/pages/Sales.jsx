@@ -94,6 +94,7 @@ export default function Sales() {
   const [reportDate, setReportDate] = useState(() => localDateInputValue(new Date()));
   const [reportMonth, setReportMonth] = useState(() => localMonthInputValue(new Date()));
   const [reportSales, setReportSales] = useState([]);
+  const [editedReportText, setEditedReportText] = useState("");
   const [reportLoading, setReportLoading] = useState(false);
   const [reportMessage, setReportMessage] = useState("");
   const [reportSending, setReportSending] = useState(false);
@@ -307,6 +308,11 @@ export default function Sales() {
     "Отказы со стороны банка:0 2",
   ].join("\n");
   const reportText = isOwnSalesRole ? personalReportText : fullReportText;
+  const displayedReportText = isAdmin ? editedReportText : reportText;
+
+  useEffect(() => {
+    setEditedReportText(reportText);
+  }, [reportText]);
 
   const saveDailySettings = async () => {
     if (!reportDate) return;
@@ -325,7 +331,7 @@ export default function Sales() {
 
   const copyReport = async () => {
     try {
-      await navigator.clipboard.writeText(reportText);
+      await navigator.clipboard.writeText(displayedReportText);
       setReportMessage("Отчёт скопирован. Его можно вставить в Telegram.");
     } catch {
       setReportMessage("Не удалось скопировать. Выделите текст отчёта и скопируйте вручную.");
@@ -334,7 +340,7 @@ export default function Sales() {
 
   const shareReportToTelegram = () => {
     window.open(
-      `https://t.me/share/url?text=${encodeURIComponent(reportText)}`,
+      `https://t.me/share/url?text=${encodeURIComponent(displayedReportText)}`,
       "_blank",
       "noopener,noreferrer"
     );
@@ -356,6 +362,7 @@ export default function Sales() {
           report_month: Number(reportMonth.slice(5, 7)),
           ...(reportStoreId ? { store_id: Number(reportStoreId) } : {}),
         };
+      if (isAdmin) reportPayload.report_text = displayedReportText;
       const response = await api.post(
         "/telegram/send-report",
         reportPayload,
@@ -825,7 +832,14 @@ export default function Sales() {
             {reportLoading ? (
               <div className="notice">Формирую отчёт...</div>
             ) : (
-              <textarea className="report-text" readOnly value={reportText} />
+              <textarea
+                className="report-text"
+                maxLength={isAdmin ? 4096 : undefined}
+                readOnly={!isAdmin}
+                value={displayedReportText}
+                onChange={(event) => setEditedReportText(event.target.value)}
+                aria-label={isAdmin ? "Редактирование текста отчёта" : "Текст отчёта"}
+              />
             )}
             {reportMessage && <div className="notice">{reportMessage}</div>}
 

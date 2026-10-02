@@ -1236,10 +1236,16 @@ def send_telegram_report(
     _admin=Depends(require_telegram_report_sender),
     _user: CurrentUser = Depends(require_roles("admin", "lead", "specialist", "cashier")),
 ):
+    if payload.report_text is not None and _user.role != "admin":
+        raise HTTPException(status_code=403, detail="Редактированный отчёт может отправить только администратор")
+    if payload.report_text is not None and not payload.report_text.strip():
+        raise HTTPException(status_code=422, detail="Текст отчёта не может быть пустым")
     schedule = db.get(models.TelegramSchedule, 1)
     timezone_name = schedule.timezone if schedule else "Asia/Almaty"
     try:
-        if _user.role in {"specialist", "cashier"}:
+        if payload.report_text is not None:
+            report = payload.report_text.strip()
+        elif _user.role in {"specialist", "cashier"}:
             zone = ZoneInfo(timezone_name)
             if payload.period == "month":
                 start_local = datetime(payload.report_year, payload.report_month, 1, tzinfo=zone)

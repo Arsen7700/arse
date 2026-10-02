@@ -241,6 +241,7 @@ class TelegramReportRequest(BaseModel):
     store_id: Optional[int] = Field(default=None, gt=0)
     report_year: Optional[int] = Field(default=None, ge=2000, le=2100)
     report_month: Optional[int] = Field(default=None, ge=1, le=12)
+    report_text: Optional[str] = Field(default=None, max_length=4096)
 
     @model_validator(mode="after")
     def validate_period_fields(self):
