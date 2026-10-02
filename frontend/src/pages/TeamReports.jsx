@@ -108,6 +108,22 @@ export default function TeamReports() {
     }
   };
 
+  const deleteTeamAccount = async (person) => {
+    if (!window.confirm(`Удалить доступ сотрудника «${person.display_name}»? История его продаж сохранится.`)) return;
+    setManagementMessage("");
+    try {
+      await api.delete(`/team/staff/${person.telegram_id}`);
+      const remaining = teamAccounts.filter((item) => item.telegram_id !== person.telegram_id);
+      setTeamAccounts(remaining);
+      if (goalStaffId === String(person.telegram_id)) {
+        setGoalStaffId(String(remaining[0]?.telegram_id || ""));
+      }
+      setManagementMessage(`Доступ сотрудника ${person.display_name} удалён. История продаж сохранена.`);
+    } catch (requestError) {
+      setManagementMessage(requestError.response?.data?.detail || "Не удалось удалить сотрудника");
+    }
+  };
+
   const createTeamAccount = async (event) => {
     event.preventDefault();
     try {
@@ -198,14 +214,17 @@ export default function TeamReports() {
         </form>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Сотрудник</th><th>Telegram ID</th><th>Роль</th><th>Лавочка</th><th>Сохранить</th></tr></thead>
+            <thead><tr><th>Сотрудник</th><th>Telegram ID</th><th>Роль</th><th>Лавочка</th><th>Действия</th></tr></thead>
             <tbody>
               {teamAccounts.map((person) => (
                 <tr key={person.telegram_id}>
                   <td>{person.display_name}</td><td>{person.telegram_id}</td>
                   <td><select aria-label={`Роль ${person.display_name}`} value={person.role} onChange={(event) => updateTeamAccount(person.telegram_id, "role", event.target.value)}>{Object.entries(roleNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></td>
                   <td><select aria-label={`Лавочка ${person.display_name}`} value={person.store_id || ""} onChange={(event) => updateTeamAccount(person.telegram_id, "store_id", event.target.value)}>{stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}</select></td>
-                  <td><button className="primary" type="button" disabled={!person.store_id} onClick={() => saveTeamAccount(person)}>Сохранить</button></td>
+                  <td className="actions">
+                    <button className="primary" type="button" disabled={!person.store_id} onClick={() => saveTeamAccount(person)}>Сохранить</button>
+                    <button className="danger" type="button" onClick={() => deleteTeamAccount(person)}>Удалить</button>
+                  </td>
                 </tr>
               ))}
               {!teamAccounts.length && <tr><td colSpan="5">Специалисты и кассиры не найдены.</td></tr>}

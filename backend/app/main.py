@@ -405,7 +405,10 @@ def list_team_staff(
 ):
     rows = db.query(models.StaffAccount, models.Store.name).outerjoin(
         models.Store, models.Store.id == models.StaffAccount.store_id
-    ).filter(models.StaffAccount.role.in_(("specialist", "cashier"))).order_by(
+    ).filter(
+        models.StaffAccount.role.in_(("specialist", "cashier")),
+        models.StaffAccount.is_active.is_(True),
+    ).order_by(
         models.StaffAccount.display_name
     ).all()
     return [
@@ -427,19 +430,26 @@ def create_team_staff(
     db: Session = Depends(get_db),
     _user: CurrentUser = Depends(require_roles("lead")),
 ):
-    if db.get(models.StaffAccount, payload.telegram_id):
-        raise HTTPException(status_code=409, detail="Этот Telegram ID уже добавлен")
     if not payload.display_name.strip():
         raise HTTPException(status_code=422, detail="Укажите имя сотрудника")
     store = get_store(db, payload.store_id)
-    account = models.StaffAccount(
-        telegram_id=payload.telegram_id,
-        display_name=payload.display_name.strip(),
-        role=payload.role,
-        store_id=store.id,
-        is_active=True,
-    )
-    db.add(account)
+    account = db.get(models.StaffAccount, payload.telegram_id)
+    if account:
+        if account.is_active or account.role not in {"specialist", "cashier"}:
+            raise HTTPException(status_code=409, detail="Этот Telegram ID уже добавлен")
+        account.display_name = payload.display_name.strip()
+        account.role = payload.role
+        account.store_id = store.id
+        account.is_active = True
+    else:
+        account = models.StaffAccount(
+            telegram_id=payload.telegram_id,
+            display_name=payload.display_name.strip(),
+            role=payload.role,
+            store_id=store.id,
+            is_active=True,
+        )
+        db.add(account)
     db.commit()
     return {
         "telegram_id": account.telegram_id,
@@ -473,6 +483,23 @@ def update_team_staff_role(
         "store_name": store.name,
         "is_active": account.is_active,
     }
+
+
+@app.delete("/team/staff/{telegram_id}")
+def delete_team_staff(
+    telegram_id: int,
+    db: Session = Depends(get_db),
+    _user: CurrentUser = Depends(require_roles("lead")),
+):
+    """Remove staff access while preserving historical sales and goals."""
+    account = db.get(models.StaffAccount, telegram_id)
+    if not account or account.role not in {"specialist", "cashier"}:
+        raise HTTPException(status_code=404, detail="Сотрудник не найден")
+    if str(telegram_id) in configured_telegram_admin_ids():
+        raise HTTPException(status_code=409, detail="Нельзя удалить первоначального администратора")
+    account.is_active = False
+    db.commit()
+    return {"ok": True, "message": "Доступ сотрудника удалён; история продаж сохранена."}
 
 
 def daily_report_settings_data(settings, report_date: date, store_id: int):
