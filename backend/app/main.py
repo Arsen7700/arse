@@ -1229,6 +1229,36 @@ def update_telegram_schedule(
     return telegram_schedule_data(schedule)
 
 
+@app.get("/admin/reports/saved-text")
+def get_saved_report_text(
+    report_key: str = Query(..., min_length=1, max_length=120),
+    db: Session = Depends(get_db),
+    _user: CurrentUser = Depends(require_roles("admin")),
+):
+    saved = db.query(models.SavedReportText).filter_by(report_key=report_key).first()
+    return {"report_key": report_key, "report_text": saved.report_text if saved else None}
+
+
+@app.put("/admin/reports/saved-text")
+def save_report_text(
+    payload: schemas.SavedReportTextUpdate,
+    db: Session = Depends(get_db),
+    _user: CurrentUser = Depends(require_roles("admin")),
+):
+    report_text = payload.report_text.strip()
+    if not report_text:
+        raise HTTPException(status_code=422, detail="Текст отчёта не может быть пустым")
+    saved = db.query(models.SavedReportText).filter_by(report_key=payload.report_key).first()
+    if saved is None:
+        saved = models.SavedReportText(report_key=payload.report_key, report_text=report_text)
+        db.add(saved)
+    else:
+        saved.report_text = report_text
+    db.commit()
+    db.refresh(saved)
+    return {"report_key": saved.report_key, "report_text": saved.report_text}
+
+
 @app.post("/telegram/send-report")
 def send_telegram_report(
     payload: schemas.TelegramReportRequest,

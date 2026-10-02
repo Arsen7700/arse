@@ -94,7 +94,10 @@ export default function Sales() {
   const [reportDate, setReportDate] = useState(() => localDateInputValue(new Date()));
   const [reportMonth, setReportMonth] = useState(() => localMonthInputValue(new Date()));
   const [reportSales, setReportSales] = useState([]);
-  const [editedReportText, setEditedReportText] = useState("");
+  const [editedReportText, setEditedReportText] = useState(null);
+  const [savedReportKey, setSavedReportKey] = useState("");
+  const [reportTextLoading, setReportTextLoading] = useState(false);
+  const [reportTextSaving, setReportTextSaving] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportMessage, setReportMessage] = useState("");
   const [reportSending, setReportSending] = useState(false);
@@ -308,11 +311,33 @@ export default function Sales() {
     "Отказы со стороны банка:0 2",
   ].join("\n");
   const reportText = isOwnSalesRole ? personalReportText : fullReportText;
-  const displayedReportText = isAdmin ? editedReportText : reportText;
+  const reportTextKey = `${reportPeriod}:${reportPeriod === "day" ? reportDate : reportMonth}:store-${reportStoreId || "all"}`;
+  const displayedReportText = isAdmin && savedReportKey === reportTextKey && editedReportText !== null
+    ? editedReportText
+    : reportText;
 
   useEffect(() => {
-    setEditedReportText(reportText);
-  }, [reportText]);
+    if (!isAdmin || !reportOpen) return;
+    let cancelled = false;
+    setSavedReportKey("");
+    setEditedReportText(null);
+    setReportTextLoading(true);
+    api.get("/admin/reports/saved-text", { params: { report_key: reportTextKey } })
+      .then((response) => {
+        if (cancelled) return;
+        setEditedReportText(response.data.report_text);
+        setSavedReportKey(reportTextKey);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setSavedReportKey(reportTextKey);
+        setReportMessage(err.response?.data?.detail || "Не удалось загрузить сохранённый отчёт");
+      })
+      .finally(() => {
+        if (!cancelled) setReportTextLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [isAdmin, reportOpen, reportTextKey]);
 
   const saveDailySettings = async () => {
     if (!reportDate) return;
@@ -326,6 +351,24 @@ export default function Sales() {
       setReportMessage("Данные кассы сохранены для выбранной даты и лавочки.");
     } catch (err) {
       setReportMessage(err.response?.data?.detail || "Не удалось сохранить данные кассы");
+    }
+  };
+
+  const saveEditedReport = async () => {
+    setReportTextSaving(true);
+    setReportMessage("");
+    try {
+      const response = await api.put("/admin/reports/saved-text", {
+        report_key: reportTextKey,
+        report_text: displayedReportText,
+      });
+      setEditedReportText(response.data.report_text);
+      setSavedReportKey(reportTextKey);
+      setReportMessage("Изменённый отчёт сохранён для выбранного периода и лавочки.");
+    } catch (err) {
+      setReportMessage(err.response?.data?.detail || "Не удалось сохранить изменённый отчёт");
+    } finally {
+      setReportTextSaving(false);
     }
   };
 
@@ -836,11 +879,20 @@ export default function Sales() {
                 className="report-text"
                 maxLength={isAdmin ? 4096 : undefined}
                 readOnly={!isAdmin}
+                disabled={isAdmin && reportTextLoading}
                 value={displayedReportText}
                 onChange={(event) => setEditedReportText(event.target.value)}
                 aria-label={isAdmin ? "Редактирование текста отчёта" : "Текст отчёта"}
               />
             )}
+            {isAdmin && <button
+              type="button"
+              className="primary"
+              disabled={reportTextLoading || reportTextSaving || reportLoading}
+              onClick={saveEditedReport}
+            >
+              {reportTextSaving ? "Сохраняю…" : "Сохранить изменённый отчёт"}
+            </button>}
             {reportMessage && <div className="notice">{reportMessage}</div>}
 
             {canSendReport && <div className="telegram-settings">

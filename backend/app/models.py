@@ -135,3 +135,12 @@ class TelegramSchedule(Base):
     send_time = Column(String(5), nullable=False, default="20:00")
     timezone = Column(String(64), nullable=False, default="Asia/Almaty")
     last_sent_on = Column(Date, nullable=True)
+
+
+class SavedReportText(Base):
+    __tablename__ = "saved_report_texts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    report_key = Column(String(120), nullable=False, unique=True, index=True)
+    report_text = Column(String(4096), nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

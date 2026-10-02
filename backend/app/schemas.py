@@ -235,6 +235,11 @@ class TelegramScheduleOut(TelegramScheduleUpdate):
     last_sent_on: Optional[date] = None
 
 
+class SavedReportTextUpdate(BaseModel):
+    report_key: str = Field(min_length=1, max_length=120)
+    report_text: str = Field(min_length=1, max_length=4096)
+
+
 class TelegramReportRequest(BaseModel):
     period: Literal["day", "month"] = "day"
     report_date: Optional[date] = None
