@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../api";
+import { useAuth } from "../auth";
 import { PLAN_FACT_ITEMS } from "../planFact";
 import StatCard from "../components/StatCard";
 
@@ -12,36 +13,65 @@ const localDateValue = (date) => {
 };
 
 export default function Dashboard() {
+  const user = useAuth();
+  const canSelectStores = ["admin", "lead"].includes(user?.role);
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [data, setData] = useState(null);
+  const [stores, setStores] = useState([]);
+  const [selectedStoreIds, setSelectedStoreIds] = useState([]);
+  const [storesLoaded, setStoresLoaded] = useState(false);
   const [selectedDay, setSelectedDay] = useState(() => localDateValue(new Date()));
   const [daySales, setDaySales] = useState([]);
   const [dayLoading, setDayLoading] = useState(true);
   const [dayError, setDayError] = useState("");
 
-  const load = async () => {
-    const d = await api.get("/dashboard", { params: { year, month } });
-    setData(d.data);
-  };
+  useEffect(() => {
+    if (!canSelectStores) {
+      setStoresLoaded(true);
+      return;
+    }
+    api.get("/stores")
+      .then((response) => {
+        setStores(response.data);
+        setSelectedStoreIds(response.data.map((store) => store.id));
+      })
+      .catch(() => setStores([]))
+      .finally(() => setStoresLoaded(true));
+  }, [canSelectStores]);
 
   useEffect(() => {
-    load();
-  }, [year, month]);
+    if (canSelectStores && !storesLoaded) return;
+    if (canSelectStores && selectedStoreIds.length === 0) {
+      setData({ year, month, sold_quantity: 0, profit: 0, stock_quantity: 0, per_product: [] });
+      return;
+    }
+    const params = new URLSearchParams({ year: String(year), month: String(month) });
+    if (canSelectStores) selectedStoreIds.forEach((id) => params.append("store_ids", String(id)));
+    api.get(`/dashboard?${params.toString()}`)
+      .then((response) => setData(response.data))
+      .catch(() => setData({ year, month, sold_quantity: 0, profit: 0, stock_quantity: 0, per_product: [] }));
+  }, [year, month, canSelectStores, storesLoaded, selectedStoreIds]);
 
   useEffect(() => {
     const loadDay = async () => {
       if (!selectedDay) return;
+      if (canSelectStores && !storesLoaded) return;
+      if (canSelectStores && selectedStoreIds.length === 0) {
+        setDaySales([]);
+        setDayLoading(false);
+        return;
+      }
       const [selectedYear, selectedMonth, selectedDate] = selectedDay.split("-").map(Number);
       const start = new Date(selectedYear, selectedMonth - 1, selectedDate);
       const end = new Date(selectedYear, selectedMonth - 1, selectedDate + 1);
       setDayLoading(true);
       setDayError("");
       try {
-        const response = await api.get("/sales", {
-          params: { start: start.toISOString(), end: end.toISOString() },
-        });
+        const params = new URLSearchParams({ start: start.toISOString(), end: end.toISOString() });
+        if (canSelectStores) selectedStoreIds.forEach((id) => params.append("store_ids", String(id)));
+        const response = await api.get(`/sales?${params.toString()}`);
         setDaySales(response.data);
       } catch (err) {
         setDayError(err.response?.data?.detail || "Не удалось загрузить статистику за день");
@@ -51,7 +81,7 @@ export default function Dashboard() {
       }
     };
     loadDay();
-  }, [selectedDay]);
+  }, [selectedDay, canSelectStores, storesLoaded, selectedStoreIds]);
 
   const dailyStats = new Map();
   (data?.per_product || [])
@@ -90,6 +120,13 @@ export default function Dashboard() {
 
   if (!data) return <div>Загрузка...</div>;
 
+  const allStoresSelected = stores.length > 0 && selectedStoreIds.length === stores.length;
+  const storeFilterLabel = allStoresSelected
+    ? "Все лавочки"
+    : selectedStoreIds.length === 1
+      ? stores.find((store) => store.id === selectedStoreIds[0])?.name || "1 лавочка"
+      : `Выбрано лавочек: ${selectedStoreIds.length}`;
+
   return (
     <>
       <div className="page-header">
@@ -98,7 +135,32 @@ export default function Dashboard() {
           <p className="muted">Показатели и динамика за {String(month).padStart(2, "0")}.{year}</p>
         </div>
 
-        <div className="row">
+        <div className="row dashboard-filters">
+          {canSelectStores && <details className="dashboard-store-filter">
+            <summary>{storeFilterLabel}</summary>
+            <div className="dashboard-store-options">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={allStoresSelected}
+                  onChange={(event) => setSelectedStoreIds(event.target.checked ? stores.map((store) => store.id) : [])}
+                />
+                Все лавочки
+              </label>
+              {stores.map((store) => (
+                <label key={store.id}>
+                  <input
+                    type="checkbox"
+                    checked={selectedStoreIds.includes(store.id)}
+                    onChange={(event) => setSelectedStoreIds((current) => event.target.checked
+                      ? [...current, store.id]
+                      : current.filter((id) => id !== store.id))}
+                  />
+                  {store.name}
+                </label>
+              ))}
+            </div>
+          </details>}
           <input
             type="number"
             value={year}

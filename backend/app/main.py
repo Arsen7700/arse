@@ -1125,10 +1125,23 @@ def list_sales(
     start: Optional[datetime] = None,
     end: Optional[datetime] = None,
     store_id: Optional[int] = None,
+    store_ids: Optional[list[int]] = Query(None),
     db: Session = Depends(get_db),
     user: CurrentUser = Depends(current_user),
 ):
-    q = apply_store_scope(db.query(models.Sale), models.Sale, user, store_id)
+    if store_ids is not None:
+        if user.role not in {"admin", "lead"}:
+            raise HTTPException(status_code=403, detail="Нет доступа к фильтру лавочек")
+        store_ids = list(dict.fromkeys(store_ids))
+        active_store_ids = {
+            row[0] for row in db.query(models.Store.id).filter(models.Store.is_active.is_(True)).all()
+        }
+        if any(selected_id not in active_store_ids for selected_id in store_ids):
+            raise HTTPException(status_code=422, detail="Выбрана недоступная лавочка")
+        q = db.query(models.Sale)
+        q = q.filter(models.Sale.store_id.in_(store_ids)) if store_ids else q.filter(False)
+    else:
+        q = apply_store_scope(db.query(models.Sale), models.Sale, user, store_id)
     if user.role in {"specialist", "cashier"}:
         q = q.filter(models.Sale.created_by_telegram_id == user.telegram_id)
     if start:
@@ -1493,6 +1506,7 @@ def dashboard(
     year: Optional[int] = Query(None, ge=2000, le=2100),
     month: Optional[int] = Query(None, ge=1, le=12),
     store_id: Optional[int] = None,
+    store_ids: Optional[list[int]] = Query(None),
     db: Session = Depends(get_db),
     user: CurrentUser = Depends(current_user),
 ):
@@ -1501,7 +1515,20 @@ def dashboard(
     month = now.month if month is None else month
     start, end = month_bounds(year, month)
 
-    sales_query = apply_store_scope(db.query(models.Sale), models.Sale, user, store_id).filter(
+    if store_ids is not None:
+        if user.role not in {"admin", "lead"}:
+            raise HTTPException(status_code=403, detail="Нет доступа к фильтру лавочек")
+        store_ids = list(dict.fromkeys(store_ids))
+        active_store_ids = {
+            row[0] for row in db.query(models.Store.id).filter(models.Store.is_active.is_(True)).all()
+        }
+        if any(selected_id not in active_store_ids for selected_id in store_ids):
+            raise HTTPException(status_code=422, detail="Выбрана недоступная лавочка")
+        sales_query = db.query(models.Sale)
+        sales_query = sales_query.filter(models.Sale.store_id.in_(store_ids)) if store_ids else sales_query.filter(False)
+    else:
+        sales_query = apply_store_scope(db.query(models.Sale), models.Sale, user, store_id)
+    sales_query = sales_query.filter(
         models.Sale.sale_date >= start,
         models.Sale.sale_date < end,
     )
@@ -1512,18 +1539,25 @@ def dashboard(
     profit = sum(s.profit for s in sales)
     sold_quantity = sum(s.quantity for s in sales)
 
-    products = apply_store_scope(
-        db.query(models.Product), models.Product, user, store_id
-    ).order_by(models.Product.name).all()
+    products_query = db.query(models.Product)
+    if store_ids is not None:
+        products_query = products_query.filter(models.Product.store_id.in_(store_ids)) if store_ids else products_query.filter(False)
+    else:
+        products_query = apply_store_scope(products_query, models.Product, user, store_id)
+    products = products_query.order_by(models.Product.name).all()
     stock_qty = sum(product.quantity for product in products)
 
     planned_products_query = db.query(models.Product).filter(
         models.Product.is_plan_fact.is_(True),
         models.Product.name.in_(PLAN_FACT_NAMES),
     )
-    planned_products = apply_store_scope(
-        planned_products_query, models.Product, user, store_id
-    ).distinct().order_by(models.Product.name).all()
+    if store_ids is not None:
+        planned_products_query = planned_products_query.filter(
+            models.Product.store_id.in_(store_ids)
+        ) if store_ids else planned_products_query.filter(False)
+    else:
+        planned_products_query = apply_store_scope(planned_products_query, models.Product, user, store_id)
+    planned_products = planned_products_query.distinct().order_by(models.Product.name).all()
 
     goal = db.query(models.MonthlyGoal).filter(
         models.MonthlyGoal.year == year,
