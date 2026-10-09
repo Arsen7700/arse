@@ -189,7 +189,7 @@ export default function Dashboard() {
       <div className="card">
         <div className="section-title">Статистика по товарам из план-факта за месяц</div>
         <div className="table-wrap">
-          <table>
+          <table className="dashboard-month-table">
             <thead>
               <tr>
                 <th>Товар</th>
@@ -235,7 +235,7 @@ export default function Dashboard() {
         </div>
 
         <div className="table-wrap">
-          <table>
+          <table className="dashboard-day-table">
             <thead>
               <tr>
                 <th>Товар</th>

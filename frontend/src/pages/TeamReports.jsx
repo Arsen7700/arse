@@ -186,7 +186,7 @@ export default function TeamReports() {
       <section className="card">
         <div className="section-title">Продажи по сотрудникам</div>
         <div className="table-wrap">
-          <table>
+          <table className="team-sales-table">
             <thead><tr><th>Сотрудник</th><th>Лавочка</th><th>Продано</th><th>Выручка</th><th>Прибыль</th><th>Продаж</th><th>По товарам</th></tr></thead>
             <tbody>
               {loading ? <tr><td colSpan="7">Загружаю отчёты…</td></tr> : staff.length ? staff.map((person) => (

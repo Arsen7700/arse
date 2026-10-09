@@ -63,7 +63,7 @@ export default function Goals() {
       <section className="card">
         <div className="section-title">План-факт за {String(month).padStart(2, "0")}.{year}</div>
         <div className="table-wrap">
-          <table>
+          <table className="goal-fact-table">
             <thead><tr><th>Товар</th><th>План, шт.</th><th>Факт, шт.</th><th>План, сом</th><th>Факт, сом</th><th>Выполнение</th></tr></thead>
             <tbody>
               {loading ? <tr><td colSpan="6">Загрузка плана-факта…</td></tr> : PLAN_FACT_GROUPS.flatMap((group) => {
