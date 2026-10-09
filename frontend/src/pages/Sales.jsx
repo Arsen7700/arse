@@ -16,6 +16,53 @@ const REPORT_ROWS = [
   { label: "Вместе дешевле", plan: 0, metric: "bundle", aliases: ["вместе дешевле"] },
   { label: "O!семья", plan: 0, metric: "family", aliases: ["o!семья", "o! семья"] },
 ];
+const reportActualToken = (label, metric) => `{{ACTUAL:${label}:${metric}}}`;
+
+const createReportTemplate = (text, reportPeriodLabel) => text.split("\n").map((line) => {
+  if (line.trim() === reportPeriodLabel) return "{{REPORT_PERIOD}}";
+  if (/^\s*лимит дс\b/i.test(line)) return line.replace(/^(\s*лимит дс\s*).*$/i, "$1{{CASH_LIMIT}}");
+  if (/^\s*остаток дс\s*:/i.test(line)) return line.replace(/^(\s*остаток дс\s*:\s*).*$/i, "$1{{CASH_REMAINING}}");
+  if (/^\s*инкассация\s*:/i.test(line)) return line.replace(/^(\s*инкассация\s*:\s*).*$/i, "$1{{COLLECTION_STATUS}}");
+
+  const normalizedLine = line.trimStart().toLocaleLowerCase("ru-RU");
+  const row = REPORT_ROWS.find((item) => normalizedLine.startsWith(item.label.toLocaleLowerCase("ru-RU")));
+  if (!row) return line;
+
+  if (row.metric === "accessories") {
+    return line.replace(/(\/\s*)[-\d.,]+\s*шт\s*\(\s*[-\d.,]+\s*\)\s*$/i,
+      (_match, prefix) => `${prefix}${reportActualToken(row.label, "quantity")}шт (${reportActualToken(row.label, "revenue")})`);
+  }
+  if (row.metric === "revenue") {
+    return line.replace(/(\/\s*)[-\d.,]+\s*$/,
+      (_match, prefix) => `${prefix}${reportActualToken(row.label, "revenue")}`);
+  }
+  if (row.metric === "family") {
+    return line.replace(/(-\s*)[-\d.,]+\s*$/,
+      (_match, prefix) => `${prefix}${reportActualToken(row.label, "quantity")}`);
+  }
+  if (row.metric === "bundle") {
+    return line.replace(/(\s+)[-\d.,]+\s*$/,
+      (_match, prefix) => `${prefix}${reportActualToken(row.label, "quantity")}`);
+  }
+  return line.replace(/([/\\]\s*)[-\d.,]+\s*$/,
+    (_match, prefix) => `${prefix}${reportActualToken(row.label, "quantity")}`);
+}).join("\n");
+
+const renderReportTemplate = (template, { reportPeriodLabel, reportActuals, dailySettings, reportPeriod }) => {
+  const cashSettings = reportPeriod === "day"
+    ? dailySettings
+    : { cash_limit: "60к", cash_remaining: "80к", collection_status: "нет" };
+  return template
+    .replaceAll("{{REPORT_PERIOD}}", reportPeriodLabel)
+    .replaceAll("{{CASH_LIMIT}}", cashSettings.cash_limit)
+    .replaceAll("{{CASH_REMAINING}}", cashSettings.cash_remaining)
+    .replaceAll("{{COLLECTION_STATUS}}", cashSettings.collection_status)
+    .replace(/\{\{ACTUAL:([^:}]+):(quantity|revenue)\}\}/g, (_match, label, metric) => {
+      const actual = reportActuals.get(label);
+      return String(Math.round(Number(actual?.[metric] || 0)));
+    });
+};
+
 const toLocalDateTime = (value) => {
   const date = new Date(value);
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
@@ -96,6 +143,7 @@ export default function Sales() {
   const [reportMonth, setReportMonth] = useState(() => localMonthInputValue(new Date()));
   const [reportSales, setReportSales] = useState([]);
   const [editedReportText, setEditedReportText] = useState(null);
+  const [savedReportTemplate, setSavedReportTemplate] = useState(null);
   const [savedReportKey, setSavedReportKey] = useState("");
   const [reportTextLoading, setReportTextLoading] = useState(false);
   const [reportTextSaving, setReportTextSaving] = useState(false);
@@ -312,10 +360,14 @@ export default function Sales() {
     "Отказы со стороны банка:0 2",
   ].join("\n");
   const reportText = isOwnSalesRole ? personalReportText : fullReportText;
-  const reportTextKey = `${reportPeriod}:${reportPeriod === "day" ? reportDate : reportMonth}:store-${reportStoreId || "all"}`;
+  const reportTextKey = `template:${reportPeriod}:store-${reportStoreId || "all"}`;
+  const legacyReportTextKey = `${reportPeriod}:${reportPeriod === "day" ? reportDate : reportMonth}:store-${reportStoreId || "all"}`;
+  const savedTemplateText = isAdmin && savedReportKey === reportTextKey && savedReportTemplate
+    ? renderReportTemplate(savedReportTemplate, { reportPeriodLabel, reportActuals, dailySettings, reportPeriod })
+    : reportText;
   const displayedReportText = isAdmin && savedReportKey === reportTextKey && editedReportText !== null
     ? editedReportText
-    : reportText;
+    : savedTemplateText;
   const historyMySales = sales.filter((sale) => (sale.product_name || "").trim().toLocaleLowerCase("ru-RU") === "мой");
   const historySaSales = sales.filter((sale) => (sale.product_name || "").trim().toLocaleLowerCase("ru-RU") === "sa");
   const mySalesLinkedToSa = new Set();
@@ -340,12 +392,23 @@ export default function Sales() {
     if (!isAdmin || !reportOpen) return;
     let cancelled = false;
     setSavedReportKey("");
+    setSavedReportTemplate(null);
     setEditedReportText(null);
     setReportTextLoading(true);
     api.get("/admin/reports/saved-text", { params: { report_key: reportTextKey } })
-      .then((response) => {
+      .then(async (response) => {
         if (cancelled) return;
-        setEditedReportText(response.data.report_text);
+        let savedText = response.data.report_text;
+        if (!savedText) {
+          const legacyResponse = await api.get("/admin/reports/saved-text", {
+            params: { report_key: legacyReportTextKey },
+          });
+          savedText = legacyResponse.data.report_text
+            ? createReportTemplate(legacyResponse.data.report_text, reportPeriodLabel)
+            : null;
+        }
+        if (cancelled) return;
+        setSavedReportTemplate(savedText);
         setSavedReportKey(reportTextKey);
       })
       .catch((err) => {
@@ -357,7 +420,7 @@ export default function Sales() {
         if (!cancelled) setReportTextLoading(false);
       });
     return () => { cancelled = true; };
-  }, [isAdmin, reportOpen, reportTextKey]);
+  }, [isAdmin, reportOpen, reportTextKey, legacyReportTextKey, reportPeriodLabel]);
 
   const saveDailySettings = async () => {
     if (!reportDate) return;
@@ -380,11 +443,12 @@ export default function Sales() {
     try {
       const response = await api.put("/admin/reports/saved-text", {
         report_key: reportTextKey,
-        report_text: displayedReportText,
+        report_text: createReportTemplate(displayedReportText, reportPeriodLabel),
       });
-      setEditedReportText(response.data.report_text);
+      setSavedReportTemplate(response.data.report_text);
+      setEditedReportText(null);
       setSavedReportKey(reportTextKey);
-      setReportMessage("Изменённый отчёт сохранён для выбранного периода и лавочки.");
+      setReportMessage("Шаблон отчёта сохранён. Факты будут пересчитаны для выбранной даты и лавочки.");
     } catch (err) {
       setReportMessage(err.response?.data?.detail || "Не удалось сохранить изменённый отчёт");
     } finally {
