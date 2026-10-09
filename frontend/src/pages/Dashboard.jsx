@@ -19,6 +19,7 @@ export default function Dashboard() {
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [data, setData] = useState(null);
+  const [dashboardError, setDashboardError] = useState("");
   const [stores, setStores] = useState([]);
   const [selectedStoreIds, setSelectedStoreIds] = useState([]);
   const [storesLoaded, setStoresLoaded] = useState(false);
@@ -44,14 +45,19 @@ export default function Dashboard() {
   useEffect(() => {
     if (canSelectStores && !storesLoaded) return;
     if (canSelectStores && selectedStoreIds.length === 0) {
+      setDashboardError("");
       setData({ year, month, sold_quantity: 0, profit: 0, stock_quantity: 0, per_product: [] });
       return;
     }
     const params = new URLSearchParams({ year: String(year), month: String(month) });
     if (canSelectStores) selectedStoreIds.forEach((id) => params.append("store_ids", String(id)));
+    setDashboardError("");
     api.get(`/dashboard?${params.toString()}`)
       .then((response) => setData(response.data))
-      .catch(() => setData({ year, month, sold_quantity: 0, profit: 0, stock_quantity: 0, per_product: [] }));
+      .catch((err) => {
+        setDashboardError(err.response?.data?.detail || "Не удалось загрузить статистику за выбранный месяц");
+        setData({ year, month, sold_quantity: 0, profit: 0, stock_quantity: 0, per_product: [] });
+      });
   }, [year, month, canSelectStores, storesLoaded, selectedStoreIds]);
 
   useEffect(() => {
@@ -179,11 +185,13 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {dashboardError && <div className="notice admin-error">{dashboardError}</div>}
+
       <section className="stats-grid dashboard-kpis" aria-label="Сводка за месяц">
-        <StatCard title="Продано по плану-факту" value={`${Number(data.sold_quantity || 0).toLocaleString("ru-RU")} шт.`} subtitle="За выбранный месяц" />
-        <StatCard title="Выручка" value={money(monthRevenue)} subtitle="По зарегистрированным продажам" />
-        <StatCard title="Прибыль" value={money(data.profit)} subtitle="За выбранный месяц" />
-        <StatCard title="Остаток товаров" value={Number(data.stock_quantity || 0).toLocaleString("ru-RU")} subtitle="Единиц на складе" />
+        <StatCard title="Продано по плану-факту" value={dashboardError ? "—" : `${Number(data.sold_quantity || 0).toLocaleString("ru-RU")} шт.`} subtitle="За выбранный месяц" />
+        <StatCard title="Выручка" value={dashboardError ? "—" : money(monthRevenue)} subtitle="По зарегистрированным продажам" />
+        <StatCard title="Прибыль" value={dashboardError ? "—" : money(data.profit)} subtitle="За выбранный месяц" />
+        <StatCard title="Остаток товаров" value={dashboardError ? "—" : Number(data.stock_quantity || 0).toLocaleString("ru-RU")} subtitle="Единиц на складе" />
       </section>
 
       <div className="card">
@@ -199,7 +207,9 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {data.per_product?.length ? (
+              {dashboardError ? (
+                <tr><td colSpan="4">Не удалось получить данные статистики.</td></tr>
+              ) : data.per_product?.length ? (
                 data.per_product.map((item) => (
                   <tr key={item.product_id ?? `manual-${item.product_name}`}>
                     <td>{item.product_name}</td>

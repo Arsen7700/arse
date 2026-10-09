@@ -1583,6 +1583,7 @@ def dashboard(
             "product_name": product.name,
             "sold_quantity": 0,
             "revenue": 0.0,
+            "realization_amount": 0.0,
             "profit": 0.0,
             "stock_quantity": None,
         })
