@@ -1261,6 +1261,24 @@ input[type="datetime-local"] {
 
 @media (max-width: 650px) {
   .account-chip { margin: -5px 2px 12px; font-size: 12px; }
+  .page-header .row.dashboard-filters { width: 100%; flex-wrap: wrap; align-items: stretch; }
+  .page-header .row.dashboard-filters > .dashboard-store-filter {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .dashboard-store-filter > summary { display: block; width: 100%; min-height: 44px; box-sizing: border-box; }
+  .dashboard-store-filter[open] > .dashboard-store-options {
+    position: static;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    max-height: 42vh;
+    margin-top: 7px;
+    box-sizing: border-box;
+  }
+  .dashboard-store-options label { min-height: 40px; }
   .admin-create-row { flex-direction: column; }
   .admin-store-row { grid-template-columns: minmax(0, 1fr) auto; }
   .admin-store-row > button { grid-column: 1 / -1; }
