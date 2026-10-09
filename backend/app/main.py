@@ -882,6 +882,8 @@ def create_sale(
     if payload.product_id is None:
         raise HTTPException(status_code=400, detail="Продажа возможна только по товару из каталога")
     product = require_sale_product(db, payload.product_id, payload.sale_date, user)
+    if payload.accessory_realization_amount is not None and product.name != "Аксессуары":
+        raise HTTPException(status_code=422, detail="Сумма реализации доступна только для аксессуаров")
     sale_store_id = product.store_id
     product_name = product.name
     sale_price = product.sale_price
@@ -915,6 +917,7 @@ def create_sale(
         unit_sale_price=float(sale_price),
         unit_purchase_price=purchase_price,
         total_amount=total,
+        accessory_realization_amount=payload.accessory_realization_amount,
         profit=profit,
         sale_date=payload.sale_date,
     )
@@ -984,6 +987,8 @@ def create_bulk_inventory_sale(
 
         for item in payload.items:
             product = products[item.product_id]
+            if item.accessory_realization_amount is not None and product.name != "Аксессуары":
+                raise HTTPException(status_code=422, detail="Сумма реализации доступна только для аксессуаров")
             purchase_price = Decimal(str(product.purchase_price))
             if item.total_amount is not None:
                 total_decimal = Decimal(str(item.total_amount)).quantize(
@@ -1012,6 +1017,7 @@ def create_bulk_inventory_sale(
                     unit_sale_price=float(unit_sale_price),
                     unit_purchase_price=product.purchase_price,
                     total_amount=float(total_decimal),
+                    accessory_realization_amount=item.accessory_realization_amount,
                     profit=float(profit_decimal),
                     sale_date=payload.sale_date,
                 )

@@ -120,6 +120,7 @@ class SaleCreate(BaseModel):
     product_name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     unit_sale_price: Optional[float] = Field(default=None, ge=0)
     total_amount: Optional[float] = Field(default=None, ge=0)
+    accessory_realization_amount: Optional[float] = Field(default=None, ge=0)
     quantity: int = Field(gt=0)
     sale_date: datetime
 
@@ -138,6 +139,7 @@ class InventorySaleLineCreate(BaseModel):
     product_id: int = Field(gt=0)
     quantity: int = Field(gt=0)
     total_amount: Optional[float] = Field(default=None, ge=0)
+    accessory_realization_amount: Optional[float] = Field(default=None, ge=0)
 
 
 class BulkInventorySaleCreate(BaseModel):
@@ -174,6 +176,7 @@ class SaleOut(BaseModel):
     unit_sale_price: float
     unit_purchase_price: float
     total_amount: float
+    accessory_realization_amount: Optional[float] = None
     profit: float
     sale_date: datetime
     model_config = {"from_attributes": True}

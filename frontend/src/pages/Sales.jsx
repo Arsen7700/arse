@@ -79,7 +79,7 @@ export default function Sales() {
   const [stores, setStores] = useState([]);
   const [sales, setSales] = useState([]);
   const [inventoryItems, setInventoryItems] = useState([
-    { category_id: "", product_id: "", quantity: 1, total_amount: "" },
+    { category_id: "", product_id: "", quantity: 1, total_amount: "", accessory_realization_amount: "" },
   ]);
   const [includeMy, setIncludeMy] = useState(false);
   const [myGiftQuantity, setMyGiftQuantity] = useState(1);
@@ -465,6 +465,9 @@ export default function Sales() {
         total_amount: products.find((product) => product.id === Number(line.product_id))?.name === "SA"
           ? line.total_amount === "" ? undefined : Number(line.total_amount)
           : products.find((product) => product.id === Number(line.product_id))?.name === "Мой" ? 0 : undefined,
+        accessory_realization_amount: products.find((product) => product.id === Number(line.product_id))?.name === "Аксессуары"
+          ? line.accessory_realization_amount === "" ? undefined : Number(line.accessory_realization_amount)
+          : undefined,
       }));
       if (saParentFact > 0 && saProduct) {
         saleItems.push({ product_id: saProduct.id, quantity: saParentFact, total_amount: 0 });
@@ -480,7 +483,7 @@ export default function Sales() {
       };
       const response = await api.post("/sales/bulk", payload);
       setMessage(`Продажа сохранена. Товарных позиций: ${response.data.length}`);
-      setInventoryItems([{ category_id: "", product_id: "", quantity: 1, total_amount: "" }]);
+      setInventoryItems([{ category_id: "", product_id: "", quantity: 1, total_amount: "", accessory_realization_amount: "" }]);
       setIncludeMy(false);
       setMyGiftQuantity(1);
       await loadProducts();
@@ -557,7 +560,7 @@ export default function Sales() {
             Лавочка продаж
             <select value={saleStoreId} onChange={(event) => {
               setSaleStoreId(event.target.value);
-              setInventoryItems([{ category_id: "", product_id: "", quantity: 1, total_amount: "" }]);
+              setInventoryItems([{ category_id: "", product_id: "", quantity: 1, total_amount: "", accessory_realization_amount: "" }]);
               setIncludeMy(false);
               setMyGiftQuantity(1);
             }} required>
@@ -578,6 +581,7 @@ export default function Sales() {
                           category_id: event.target.value,
                           product_id: event.target.value,
                           total_amount: "",
+                          accessory_realization_amount: "",
                         } : item
                       ))}
                       required
@@ -592,7 +596,7 @@ export default function Sales() {
                       value={line.product_id}
                       disabled={!line.category_id}
                       onChange={(event) => setInventoryItems(inventoryItems.map((item, itemIndex) =>
-                        itemIndex === index ? { ...item, product_id: event.target.value, total_amount: "" } : item
+                        itemIndex === index ? { ...item, product_id: event.target.value, total_amount: "", accessory_realization_amount: "" } : item
                       ))}
                       required
                     >
@@ -639,6 +643,21 @@ export default function Sales() {
                       />
                     </label>
                   )}
+                  {products.find((product) => product.id === Number(line.product_id))?.name === "Аксессуары" && (
+                    <label>
+                      Сумма реализации аксессуаров (не входит в отчёты), сом
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Введите сумму аксессуаров"
+                        value={line.accessory_realization_amount}
+                        onChange={(event) => setInventoryItems(inventoryItems.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, accessory_realization_amount: event.target.value } : item
+                        ))}
+                      />
+                    </label>
+                  )}
                   <button
                     type="button"
                     className="danger"
@@ -675,7 +694,7 @@ export default function Sales() {
                 type="button"
                 onClick={() => setInventoryItems([
                   ...inventoryItems,
-                  { category_id: "", product_id: "", quantity: 1, total_amount: "" },
+                  { category_id: "", product_id: "", quantity: 1, total_amount: "", accessory_realization_amount: "" },
                 ])}
               >
                 + Добавить показатель

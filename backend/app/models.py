@@ -75,6 +75,7 @@ class Sale(Base):
     unit_sale_price = Column(Float, nullable=False)
     unit_purchase_price = Column(Float, nullable=False)
     total_amount = Column(Float, nullable=False)
+    accessory_realization_amount = Column(Float, nullable=True)
     profit = Column(Float, nullable=False)
     sale_date = Column(DateTime, nullable=False, default=datetime.utcnow)
 

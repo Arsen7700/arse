@@ -73,6 +73,10 @@ def migrate_store_and_staff_schema(engine: Engine) -> None:
             connection.exec_driver_sql(
                 "ALTER TABLE sales ADD COLUMN created_by_telegram_id BIGINT"
             )
+        if "accessory_realization_amount" not in columns_by_table["sales"]:
+            connection.exec_driver_sql(
+                "ALTER TABLE sales ADD COLUMN accessory_realization_amount FLOAT"
+            )
 
         connection.execute(
             text("UPDATE products SET store_id = :store_id WHERE store_id IS NULL"),
