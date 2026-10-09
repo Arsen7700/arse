@@ -149,6 +149,19 @@ h1 {
   display: grid;
   gap: 12px;
 }
+.my-gift-control {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.my-gift-quantity {
+  display: grid;
+  gap: 6px;
+  width: 170px;
+  color: #aab7cb;
+  font-size: 13px;
+}
 
 .inventory-sale-line {
   display: grid;

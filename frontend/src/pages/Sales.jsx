@@ -82,6 +82,7 @@ export default function Sales() {
     { category_id: "", product_id: "", quantity: 1, total_amount: "" },
   ]);
   const [includeMy, setIncludeMy] = useState(false);
+  const [myGiftQuantity, setMyGiftQuantity] = useState(1);
   const [saleDate, setSaleDate] = useState(() => toLocalDateTime(new Date()));
   const [message, setMessage] = useState("");
   const [historyMessage, setHistoryMessage] = useState("");
@@ -470,7 +471,7 @@ export default function Sales() {
       }
       const myProduct = productForName("Мой");
       if (includeMy && hasSaCategorySelected && myProduct) {
-        saleItems.push({ product_id: myProduct.id, quantity: 1, total_amount: 0 });
+        saleItems.push({ product_id: myProduct.id, quantity: Number(myGiftQuantity), total_amount: 0 });
       }
 
       const payload = {
@@ -481,6 +482,7 @@ export default function Sales() {
       setMessage(`Продажа сохранена. Товарных позиций: ${response.data.length}`);
       setInventoryItems([{ category_id: "", product_id: "", quantity: 1, total_amount: "" }]);
       setIncludeMy(false);
+      setMyGiftQuantity(1);
       await loadProducts();
       if (historyOpen) await loadHistory();
     } catch (err) {
@@ -557,6 +559,7 @@ export default function Sales() {
               setSaleStoreId(event.target.value);
               setInventoryItems([{ category_id: "", product_id: "", quantity: 1, total_amount: "" }]);
               setIncludeMy(false);
+              setMyGiftQuantity(1);
             }} required>
               {stores.map((store) => <option key={store.id} value={store.id}>{store.name}</option>)}
             </select>
@@ -647,14 +650,27 @@ export default function Sales() {
                   </button>
                 </div>
               ))}
-              {hasSaCategorySelected && <label className="admin-active-toggle">
-                <input
-                  type="checkbox"
-                  checked={includeMy}
-                  onChange={(event) => setIncludeMy(event.target.checked)}
-                />
-                Добавить «Мой» (подарок, 1 шт.)
-              </label>}
+              {hasSaCategorySelected && <div className="my-gift-control">
+                <label className="admin-active-toggle">
+                  <input
+                    type="checkbox"
+                    checked={includeMy}
+                    onChange={(event) => setIncludeMy(event.target.checked)}
+                  />
+                  Добавить «Мой» (подарок)
+                </label>
+                {includeMy && <label className="my-gift-quantity">
+                  Количество «Мой»
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={myGiftQuantity}
+                    onChange={(event) => setMyGiftQuantity(event.target.value)}
+                    required
+                  />
+                </label>}
+              </div>}
               <button
                 type="button"
                 onClick={() => setInventoryItems([
