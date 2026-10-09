@@ -91,6 +91,7 @@ export default function Dashboard() {
         product_name: item.product_name,
         sold_quantity: 0,
         revenue: 0,
+        realization_amount: 0,
         profit: 0,
         transactions: 0,
       });
@@ -104,11 +105,13 @@ export default function Dashboard() {
       product_name: sale.product_name || `Товар ${sale.product_id ?? "без каталога"}`,
       sold_quantity: 0,
       revenue: 0,
+      realization_amount: 0,
       profit: 0,
       transactions: 0,
     };
     item.sold_quantity += sale.quantity;
     item.revenue += sale.total_amount;
+    item.realization_amount += Number(sale.accessory_realization_amount || 0);
     item.profit += sale.profit;
     item.transactions += 1;
     dailyStats.set(key, item);
@@ -192,6 +195,7 @@ export default function Dashboard() {
                 <th>Товар</th>
                 <th>Факт, количество</th>
                 <th>Факт, сумма</th>
+                <th>Сумма реализации аксессуаров</th>
               </tr>
             </thead>
             <tbody>
@@ -201,11 +205,12 @@ export default function Dashboard() {
                     <td>{item.product_name}</td>
                     <td>{item.sold_quantity}</td>
                     <td>{money(item.revenue)}</td>
+                    <td>{money(item.realization_amount)}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="3">На выбранный месяц показатели план-факта не найдены</td>
+                  <td colSpan="4">На выбранный месяц показатели план-факта не найдены</td>
                 </tr>
               )}
             </tbody>
@@ -236,23 +241,25 @@ export default function Dashboard() {
                 <th>Товар</th>
                 <th>Факт, количество</th>
                 <th>Факт, сумма</th>
+                <th>Сумма реализации аксессуаров</th>
                 <th>Количество продаж</th>
               </tr>
             </thead>
             <tbody>
               {dayLoading ? (
-                <tr><td colSpan="4">Загрузка статистики...</td></tr>
+                <tr><td colSpan="5">Загрузка статистики...</td></tr>
               ) : dailyProducts.length ? (
                 dailyProducts.map((item, index) => (
                   <tr key={`${item.product_name}-${index}`}>
                     <td>{item.product_name}</td>
                     <td>{item.sold_quantity}</td>
                     <td>{money(item.revenue)}</td>
+                    <td>{money(item.realization_amount)}</td>
                     <td>{item.transactions}</td>
                   </tr>
                 ))
               ) : (
-                <tr><td colSpan="4">Показатели пока не найдены</td></tr>
+                <tr><td colSpan="5">Показатели пока не найдены</td></tr>
               )}
             </tbody>
           </table>

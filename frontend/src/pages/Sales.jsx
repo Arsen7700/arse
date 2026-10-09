@@ -316,6 +316,25 @@ export default function Sales() {
   const displayedReportText = isAdmin && savedReportKey === reportTextKey && editedReportText !== null
     ? editedReportText
     : reportText;
+  const historyMySales = sales.filter((sale) => (sale.product_name || "").trim().toLocaleLowerCase("ru-RU") === "мой");
+  const historySaSales = sales.filter((sale) => (sale.product_name || "").trim().toLocaleLowerCase("ru-RU") === "sa");
+  const mySalesLinkedToSa = new Set();
+  const matchedSaSales = new Set();
+  historyMySales.forEach((mySale) => {
+    const nearestSa = historySaSales
+      .filter((saSale) => !matchedSaSales.has(saSale.id)
+        && saSale.store_id === mySale.store_id
+        && saSale.created_by_telegram_id === mySale.created_by_telegram_id)
+      .sort((a, b) => Math.abs(new Date(a.sale_date) - new Date(mySale.sale_date))
+        - Math.abs(new Date(b.sale_date) - new Date(mySale.sale_date)))[0];
+    if (nearestSa) {
+      mySalesLinkedToSa.add(nearestSa.id);
+      matchedSaSales.add(nearestSa.id);
+    }
+  });
+  const historyRows = sales
+    .filter((sale) => (sale.product_name || "").trim().toLocaleLowerCase("ru-RU") !== "мой")
+    .map((sale) => ({ ...sale, includesMy: mySalesLinkedToSa.has(sale.id) }));
 
   useEffect(() => {
     if (!isAdmin || !reportOpen) return;
@@ -758,7 +777,7 @@ export default function Sales() {
                   onChange={(event) => setHistoryDate(event.target.value)}
                 />
               </label>
-              <div className="history-summary">Продаж за день: {sales.length}</div>
+              <div className="history-summary">Записей за день: {historyRows.length}</div>
             </div>
 
             {historyMessage && <div className="notice">{historyMessage}</div>}
@@ -799,13 +818,14 @@ export default function Sales() {
             )}
 
             <div className="table-wrap">
-              <table>
+              <table className={`sales-history-table${isLead || isAdmin ? " sales-history-table-wide" : ""}`}>
                 <thead>
                   <tr>
                     <th>Время</th>
                     <th>Товар</th>
                     <th>Кол-во</th>
                     <th>Сумма</th>
+                    <th>Сумма реализации</th>
                     <th>Прибыль</th>
                     {(isLead || isAdmin) && <><th>Сотрудник</th><th>Лавочка</th></>}
                     <th>Действия</th>
@@ -813,16 +833,17 @@ export default function Sales() {
                 </thead>
                 <tbody>
                   {historyLoading ? (
-                    <tr><td colSpan={isLead || isAdmin ? 8 : 6}>Загрузка истории...</td></tr>
-                  ) : sales.length ? (
-                    sales.map((sale) => (
+                    <tr><td colSpan={isLead || isAdmin ? 9 : 7}>Загрузка истории...</td></tr>
+                  ) : historyRows.length ? (
+                    historyRows.map((sale) => (
                       <tr key={sale.id}>
                         <td>{new Date(sale.sale_date).toLocaleTimeString("ru-RU")}</td>
-                        <td>{["услуги", "услуга"].includes((sale.product_name || "").trim().toLocaleLowerCase("ru-RU"))
+                        <td>{sale.product_name?.trim().toLocaleLowerCase("ru-RU") === "sa" ? <span className="history-sa-item">SA<input type="checkbox" checked={sale.includesMy} readOnly aria-label="Мой добавлен к SA" /></span> : ["услуги", "услуга"].includes((sale.product_name || "").trim().toLocaleLowerCase("ru-RU"))
                           ? "SA — услуги (сумма)"
                           : sale.product_name || "Товар недоступен"}</td>
                         <td>{sale.quantity}</td>
                         <td>{sale.total_amount} сом</td>
+                        <td>{sale.accessory_realization_amount != null ? `${sale.accessory_realization_amount} сом` : "—"}</td>
                         <td>{sale.profit} сом</td>
         {(isLead || isAdmin) && <><td>{sale.seller_name || "Не указан"}</td><td>{sale.store_name || "—"}</td></>}
                         <td className="actions">
@@ -832,7 +853,7 @@ export default function Sales() {
                       </tr>
                     ))
                   ) : (
-                    <tr><td colSpan={isLead || isAdmin ? 8 : 6}>За выбранный день продаж нет</td></tr>
+                    <tr><td colSpan={isLead || isAdmin ? 9 : 7}>За выбранный день продаж нет</td></tr>
                   )}
                 </tbody>
               </table>

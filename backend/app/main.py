@@ -627,6 +627,7 @@ def staff_sales_report(
             "product_name": sale.product_name,
             "sold_quantity": 0,
             "revenue": 0.0,
+            "realization_amount": 0.0,
             "profit": 0.0,
             "sales_count": 0,
         })
@@ -1596,6 +1597,7 @@ def dashboard(
         if not is_service:
             stats["sold_quantity"] += sale.quantity
         stats["revenue"] += sale.total_amount
+        stats["realization_amount"] += sale.accessory_realization_amount or 0
         stats["profit"] += sale.profit
         if is_service:
             sa_stats = product_stats.get(("plan_fact", "sa"))
@@ -1607,6 +1609,7 @@ def dashboard(
         {
             **stats,
             "revenue": round(stats["revenue"], 2),
+            "realization_amount": round(stats["realization_amount"], 2),
             "profit": round(stats["profit"], 2),
         }
         for stats in sorted(
