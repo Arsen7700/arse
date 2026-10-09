@@ -314,6 +314,33 @@ table {
   border-collapse: collapse;
 }
 
+.sales-history-table {
+  width: 820px;
+  min-width: 820px;
+  table-layout: auto;
+}
+.sales-history-table-wide {
+  width: 1180px;
+  min-width: 1180px;
+}
+.sales-history-table th,
+.sales-history-table td {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.history-sa-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+.history-sa-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #3478f6;
+}
+
 th, td {
   text-align: left;
   padding: 12px 10px;
